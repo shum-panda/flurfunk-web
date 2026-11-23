@@ -133,6 +133,16 @@ h2.sub-title { font-size: 17px; font-weight: 700; margin-top: 8px; }
 .pill.late { background: var(--late-soft); color: var(--late); }
 .pill.help { background: var(--help-soft); color: var(--help); }
 .pill.vac { background: var(--vac-soft); color: var(--vac); }
+.pill.today { background: var(--help-soft); color: var(--help); }
+.banner.remind { background: var(--help-soft); border-color: transparent; }
+.banner.remind .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.modes { display: grid; gap: 10px; }
+.mode { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; }
+.mode.cur { border-color: var(--accent); background: var(--accent-soft); }
+.mode h3 { font-size: 17px; }
+.mode p { font-size: 15px; color: var(--ink); }
+.mode .pill { justify-self: start; }
+.steps { margin: 0; padding-left: 22px; display: grid; gap: 10px; font-size: 15px; }
 
 .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; font-size: 15px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -452,7 +462,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   let S;
   const KEY = "flurfunk-proto-v8"; // alter Speicherort vor dem Sync-Umbau, wird einmalig übernommen
   // jobs = Vertretungen unter Mitbewohnern
-  const HH_KEYS = ["meta", "settings", "parties", "tasks", "vacations", "overrides", "done", "ratings", "notes", "claims", "distributed", "requests", "feed", "nudged", "jobs"];
+  const HH_KEYS = ["meta", "settings", "parties", "tasks", "vacations", "overrides", "done", "ratings", "notes", "claims", "distributed", "requests", "feed", "nudged", "jobs", "rules", "nudges"];
   const LOCAL_KEYS = ["me", "tab", "wk", "statRange"];
   const DEFAULT_TASKS = () => [
     { id: "treppe", title: "Treppenhaus wischen", detail: "Alle Etagen feucht wischen, Geländer und Briefkästen abwischen.", due: 5, every: 1, points: 3, price: 15, doneText: "hat das Treppenhaus gewischt." },
@@ -513,7 +523,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       ["Dachrinne und Abflüsse prüfen", "Laub entfernen, im Frühjahr und im Herbst.", 26, 5, 3]
     ] }
   ];
-  const DEFAULT_SETTINGS = admin => ({ admin, mode: "plan", distDay: 3, rating: { enabled: true, who: "alle", anonymous: true, inStats: true, notes: true }, vacation: { weeks: 4, approval: "one" } });
+  const DEFAULT_SETTINGS = admin => ({ admin, mode: "plan", distDay: 3, rating: { enabled: true, who: "alle", anonymous: true, inStats: true, notes: true }, vacation: { weeks: 4, approval: "one" }, nudge: { enabled: false, anonymous: true } });
   const uid = p => p + now().toString(36) + Math.random().toString(36).slice(2, 7);
   const localDefaults = () => ({ me: null, tab: "woche", wk: 0, statRange: 12 });
 
@@ -526,7 +536,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       parties: [{ id: me, name: myName, short: myName.split(" ")[0], flat: "" }],
       tasks: DEFAULT_TASKS(), vacations: [], overrides: {}, done: {}, ratings: {}, notes: {}, claims: {}, distributed: {},
       requests: [], feed: [{ id: uid("f"), at: now(), by: me, text: `hat ${name} in Flurfunk angelegt.`, thanks: [] }],
-      nudged: {}, jobs: []
+      nudged: {}, jobs: [], rules: [], nudges: []
     };
   }
 
@@ -540,7 +550,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         mode: "plan",            // plan = feste Rotation, liste = jeder nimmt sich selbst
         distDay: 3,              // Aufgabenliste: übrige Aufgaben werden an diesem Tag verteilt
         rating: { enabled: true, who: "alle", anonymous: true, inStats: true, notes: true },
-        vacation: { weeks: 4, approval: "one" }
+        vacation: { weeks: 4, approval: "one" },
+        nudge: { enabled: true, anonymous: true }
       },
       parties: [
         { id: "w1", name: "Ayşe Yilmaz", short: "Ayşe", flat: "Zimmer 1" },
@@ -557,7 +568,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         { id: "v3", who: "w5", from: 4, to: 5, type: "extra", status: "pending", approvals: ["w4"], rejections: [], reason: "Praktikum in Lissabon, zwei Wochen vor Ort.", at: t - 2 * DAY }
       ],
       overrides: {}, done: {}, ratings: {}, notes: {}, claims: {}, distributed: {},
-      requests: [], feed: [], nudged: {},
+      requests: [], feed: [], nudged: {}, nudges: [],
+      rules: RULES.map(([title, text], i) => ({ id: "r" + i, title, text })),
       // Vertretungen unter Mitbewohnern
       jobs: []
     };
@@ -707,6 +719,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     if (r) return { cls: "help", label: "Tausch angefragt" };
     if (!who) return { cls: "open", label: "Frei" };
     if (dueDate(t, wk) < new Date()) return { cls: "late", label: "Überfällig" };
+    if (startOfDay(dueDate(t, wk)).getTime() === startOfDay(new Date()).getTime()) return { cls: "today", label: "Heute fällig" };
     if (S.claims[k]?.auto) return { cls: "open", label: "Zugeteilt" };
     return { cls: "open", label: S.settings.mode === "liste" ? "Übernommen" : "Offen" };
   }
@@ -762,7 +775,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         <div class="pager"><button type="button" class="icon-btn" data-wk="-1">← Zurück</button>${wk !== 0 ? `<button type="button" class="icon-btn" data-wk="0">Heute</button>` : ""}<button type="button" class="icon-btn" data-wk="1">Weiter →</button></div>
       </div>
       ${helpBox("woche")}
-      ${banner}${vacBanner}${listBanner}
+      ${wk === 0 ? remindBanner() : ""}${banner}${vacBanner}${listBanner}
       ${list.length ? `<div class="tasks">${list.map(t => taskCard(t, wk, fc)).join("")}</div>` : `<p class="hint">In dieser Woche ist nichts geplant.</p>`}
       <section class="addtasks">
         <h2>Aufgabe fehlt?</h2>
@@ -792,8 +805,11 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       if (!isMine && b?.status === "open" && canTake(S.me, b)) acts.push(`<button type="button" class="btn help" data-take="${b.id}">${b.price ? `Übernehmen für ${eur(b.price)}` : "Übernehmen"}</button>`);
       if (b?.status === "confirmed" && b.taker === S.me) acts.push(`<button type="button" class="btn primary" data-jdone="${b.id}">Erledigt</button>`);
       if (!isMine && r && r.to === S.me && !meAway) acts.push(`<button type="button" class="btn help" data-take="${r.id}">Tausch annehmen</button>`);
-      if (!isMine && who && !b && st.cls === "late" && !S.nudged[k + S.me]) acts.push(`<button type="button" class="btn quiet" data-nudge="${k}">Freundlich erinnern</button>`);
+      if (!isMine && who && who !== S.me && !b && wk === 0 && S.settings.nudge?.enabled && !onVac(who, wk)) acts.push(canNudge(who)
+        ? `<button type="button" class="btn quiet" data-nudge="${k}">Anstupsen</button>`
+        : `<button type="button" class="btn quiet" disabled title="Jede Person kann einmal am Tag angestupst werden.">Heute schon angestupst</button>`);
     }
+    if (d && wk >= -1 && (d.by === S.me || isAdmin())) acts.push(`<button type="button" class="btn quiet" data-undone="${k}">Doch nicht erledigt</button>`);
     let byline = who ? `<b>${esc(youOr(who))}</b>` : `<b>Noch frei</b>`;
     if (b?.status === "confirmed" || b?.status === "done") byline += ` · Vertretung für ${esc(youOr(b.from))}`;
     else if (ov?.type === "swap") byline += " · getauscht";
@@ -1014,6 +1030,18 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
           ${R.enabled || R.notes ? sw("s-r-anon", R.anonymous, "Anonym", "Bei Bewertungen sieht man nur den Durchschnitt, bei Anmerkungen nicht, wer sie geschrieben hat.") : ""}
         </section>
         <section class="set">
+          <h2>Erinnerungen und Anstupsen</h2>
+          <div class="row"><span class="t" style="font-weight:600">Erinnerungen</span><p>Wer Flurfunk öffnet, sieht oben in der Woche, was heute fällig oder überfällig ist. Auf Wunsch kommt das auch als Benachrichtigung, solange die App im Hintergrund offen ist.</p></div>
+          ${sw("s-n-on", s.nudge?.enabled, "Anstupsen erlauben", "Mitbewohner können jemanden an eine offene Aufgabe dieser Woche erinnern, jede Person höchstens einmal am Tag. Die Erinnerung erscheint beim nächsten Öffnen von Flurfunk.")}
+          ${s.nudge?.enabled ? `<div class="row"><span class="t" style="font-weight:600">Wer angestupst wird, sieht</span><div class="radios"><label><input type="radio" name="s-n-anon" value="1" ${s.nudge.anonymous ? "checked" : ""} ${dis}>nicht, von wem</label><label><input type="radio" name="s-n-anon" value="0" ${!s.nudge.anonymous ? "checked" : ""} ${dis}>den Namen</label></div></div>` : ""}
+        </section>
+        <section class="set">
+          <h2>Hausordnung (${S.rules.length})</h2>
+          ${S.rules.map(r => `<div class="row trow"><span class="t" style="font-weight:600">${esc(r.title)}</span>${isAdmin() ? `<button type="button" class="btn small" data-redit="${r.id}">Ändern</button>` : ""}<p>${esc(r.text)}</p></div>`).join("")}
+          ${ruleActions()}
+          <p class="hint">Solange keine Regeln angelegt sind, wird die Hausordnung in der App nicht angezeigt.</p>
+        </section>
+        <section class="set">
           <h2>Urlaub</h2>
           <div class="row"><label class="t" for="s-v-weeks">Standardurlaub pro Person und Jahr</label><span><input id="s-v-weeks" class="sm" type="number" min="0" max="12" value="${V.weeks}" ${dis}> Wochen</span><p>Wird ohne Zustimmung eingetragen.</p></div>
           <div class="row"><span class="t" style="font-weight:600">Zusätzlicher Urlaub braucht Zustimmung von</span><div class="radios"><label><input type="radio" name="s-v-appr" value="one" ${V.approval === "one" ? "checked" : ""} ${dis}>einer Person</label><label><input type="radio" name="s-v-appr" value="all" ${V.approval === "all" ? "checked" : ""} ${dis}>allen</label></div></div>
@@ -1082,10 +1110,134 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     ["Gäste", "Übernachtungsgäste kurz im Flurfunk ankündigen. Länger als eine Woche nur nach Absprache."],
     ["Vertretung und Urlaub", "Wer seine Aufgabe nicht schafft, sorgt selbst für Ersatz. Urlaub wird in Flurfunk eingetragen, dann übernehmen die anderen."]
   ];
+  // Vorschläge für die Hausordnung (der Admin übernimmt sie und passt sie an)
+  const RULE_SUGGEST = [
+    ["Ruhezeiten", "Werktags ab 22 Uhr und sonntags ist es leise. Musik und Telefonate dann mit Kopfhörern oder im Zimmer."],
+    ["Küche", "Geschirr am selben Tag spülen oder in die Spülmaschine. Herd und Arbeitsfläche nach dem Kochen abwischen."],
+    ["Kühlschrank", "Jeder hat sein Fach, Gemeinsames ist beschriftet. Abgelaufenes fliegt beim Kühlschrank-Putzen raus."],
+    ["Bad", "Nach dem Duschen kurz lüften und Haare aus dem Abfluss nehmen. Eigene Sachen nicht dauerhaft im Bad lagern."],
+    ["Müll", "Wer den Eimer voll macht, bringt den Müll raus. Glas, Papier und Gelber Sack werden getrennt."],
+    ["Gemeinsame Vorräte", "Spülmittel, Toilettenpapier und Putzmittel kaufen wir zusammen. Wer etwas aufbraucht, sagt Bescheid."],
+    ["Gäste", "Übernachtungsgäste kurz im Flurfunk ankündigen. Länger als eine Woche nur nach Absprache."],
+    ["Lüften und Heizen", "Stoßlüften statt Fenster kippen. Beim Lüften und wenn niemand da ist, die Heizung herunterdrehen."],
+    ["Waschmaschine", "Wäsche nach dem Waschen gleich rausnehmen. Den Wäscheständer nicht tagelang im Flur stehen lassen."],
+    ["Rauchen", "In der Wohnung wird nicht geraucht, nur draußen oder auf dem Balkon."],
+    ["Vertretung und Urlaub", "Wer seine Aufgabe nicht schafft, sorgt selbst für Ersatz. Urlaub wird in Flurfunk eingetragen, dann übernehmen die anderen."],
+    ["Probleme ansprechen", "Stört dich etwas, sprich es direkt und freundlich an, nicht per Zettel. Für Größeres setzen wir uns zusammen."]
+  ];
+  const ruleActions = () => isAdmin() ? `<div class="actions" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" data-rsuggest>Vorschläge ansehen</button><button type="button" class="btn" data-redit="new">Eigene Regel</button></div>` : "";
   const viewOrdnung = () => `
     <h1 class="section-title">Hausordnung</h1>
     <p class="lead">Die wichtigsten Regeln der WG, kurz zusammengefasst.</p>
-    <div class="rules">${RULES.map(([h, p]) => `<div class="rule"><h3>${esc(h)}</h3><p>${esc(p)}</p></div>`).join("")}</div>`;
+    ${S.rules.length ? `<div class="rules">${S.rules.map(r => `<div class="rule"><h3>${esc(r.title)}</h3><p>${esc(r.text)}</p>${isAdmin() ? `<button type="button" class="btn quiet small" style="justify-self:start" data-redit="${r.id}">Ändern</button>` : ""}</div>`).join("")}</div>` : `<p class="hint">Noch keine Regeln. Solange keine da sind, sehen die anderen die Hausordnung nicht.</p>`}
+    ${ruleActions()}`;
+  const hasRules = () => S.rules.length > 0 || isAdmin();
+  function sheetRule(id) {
+    const r = id === "new" ? { title: "", text: "" } : S.rules.find(x => x.id === id); if (!r) return;
+    openSheet(`
+      <h2>${id === "new" ? "Neue Regel" : "Regel ändern"}</h2>
+      <div class="field"><label for="re-title">Überschrift</label><input id="re-title" type="text" maxlength="50" value="${esc(r.title)}" placeholder="z. B. Ruhezeiten"></div>
+      <div class="field"><label for="re-text">Regel</label><textarea id="re-text" rows="3" maxlength="400" placeholder="z. B. Werktags ab 22 Uhr ist es leise.">${esc(r.text)}</textarea></div>
+      <div class="row">${id === "new" ? "" : `<button type="button" class="btn quiet" style="margin-right:auto;color:var(--late)" data-rdel-ask="${id}">Löschen</button>`}<button type="button" class="btn" data-close-btn>Abbrechen</button><button type="button" class="btn primary" data-rsave="${id}">Speichern</button></div>`);
+    $("#re-title").focus();
+  }
+  function saveRule(id) {
+    const title = $("#re-title").value.trim(), text = $("#re-text").value.trim();
+    if (!title || !text) { toast("Bitte Überschrift und Regel ausfüllen."); return false; }
+    if (id === "new") { S.rules.push({ id: uid("r"), title, text }); post(S.me, `hat die Hausordnung ergänzt: „${title}“.`); }
+    else { Object.assign(S.rules.find(x => x.id === id), { title, text }); post(S.me, `hat in der Hausordnung „${title}“ geändert.`); }
+    toast("Gespeichert. Alle sehen es unter Hausordnung.");
+    return true;
+  }
+  function sheetRuleSuggest() {
+    openSheet(`
+      <h2>Vorschläge für die Hausordnung</h2>
+      <p class="lead">Wähl aus, was für euch passt. Den Text kannst du danach anpassen.</p>
+      <div class="choice">${RULE_SUGGEST.map(([title, text], i) => { const has = S.rules.some(r => sameTitle(r.title, title));
+        return `<label style="${has ? "opacity:.55" : ""}"><input type="checkbox" data-ri="${i}" ${has ? "disabled" : ""}><strong>${esc(title)}</strong><small>${has ? "Habt ihr schon" : esc(text)}</small></label>`; }).join("")}</div>
+      <div class="row"><button type="button" class="btn" data-close-btn>Abbrechen</button><button type="button" class="btn primary" data-rsuggest-add>Ausgewählte übernehmen</button></div>`);
+  }
+
+  // ---------- Erinnerungen und Anstupsen ----------
+  const dayStr = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const canNudge = who => DEV.nudgeDay?.[`${S.me}>${who}`] !== dayStr();
+  const nudgesForMe = () => S.nudges.filter(n => n.to === S.me && n.at > now() - 3 * DAY).sort((a, b) => b.at - a.at);
+  const nudgeText = n => `${n.from && isMember(n.from) ? esc(P(n.from).short) : "Jemand"} erinnert dich an „${esc(splitKey(n.key)[0].title)}“.`;
+  function myDue() {
+    const open = TASKS().filter(t => active(t, 0) && assignee(t, 0) === S.me && !S.done[keyOf(t.id, 0)] && !jobFor(keyOf(t.id, 0)));
+    const nw = new Date(), late = open.filter(t => dueDate(t, 0) < nw);
+    return { late, today: open.filter(t => !late.includes(t) && startOfDay(dueDate(t, 0)).getTime() === startOfDay(nw).getTime()) };
+  }
+  function remindBanner() {
+    if (onVac(S.me, 0)) return "";
+    const { late, today } = myDue(), nud = nudgesForMe().filter(n => n.at > DEV.nudgeSeen);
+    if (!late.length && !today.length && !nud.length) return "";
+    const lines = [
+      ...nud.map(nudgeText),
+      ...(late.length ? [`Überfällig: ${late.map(t => esc(t.title)).join(", ")}`] : []),
+      ...(today.length ? [`Heute fällig: ${today.map(t => esc(t.title)).join(", ")}`] : [])
+    ];
+    const canAsk = "Notification" in window && Notification.permission === "default";
+    return `<div class="banner remind" role="status"><span><b>Erinnerung</b><br>${lines.join("<br>")}</span><span class="actions">${nud.length ? `<button type="button" class="btn small" data-nudge-seen>Gesehen</button>` : ""}${canAsk ? `<button type="button" class="btn quiet small" data-notif>Auch als Benachrichtigung</button>` : ""}</span></div>`;
+  }
+  function notify(body) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const opt = { body, icon: "icons/icon-192.png", tag: "flurfunk" };
+    (navigator.serviceWorker?.getRegistration?.() || Promise.resolve(null)).then(r => r ? r.showNotification("Flurfunk", opt) : new Notification("Flurfunk", opt)).catch(() => {});
+  }
+  const plain = html => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  // Neue Anstupser, die per Abgleich ankommen, während die App im Hintergrund läuft
+  function notifyNudges() {
+    if (!S.meta || !isMember(S.me)) return;
+    const fresh = nudgesForMe().filter(n => n.at > DEV.nudgeNotified);
+    if (!fresh.length) return;
+    DEV.nudgeNotified = Math.max(...fresh.map(n => n.at)); saveDevice();
+    if (document.hidden) notify(plain(nudgeText(fresh[0])));
+  }
+  // Tägliche Erinnerung, solange die App (auch im Hintergrund) läuft: ab 9 Uhr, einmal am Tag
+  setInterval(() => {
+    if (!S?.meta || !isMember(S.me) || !document.hidden || DEV.remindDay === dayStr() || new Date().getHours() < 9) return;
+    const { late, today } = myDue(); if (!late.length && !today.length) return;
+    DEV.remindDay = dayStr(); saveDevice();
+    notify([...late, ...today].map(t => t.title).join(", ") + (late.length ? " – überfällig." : " – heute fällig."));
+  }, 10 * 60 * 1000);
+
+  // ---------- Erster Start: die zwei Arten, die Arbeit zu verteilen ----------
+  let introShown = false;
+  function sheetIntro(page) {
+    DEV.intro = true; saveDevice();
+    const cur = S.settings.mode, liste = cur === "liste";
+    if (page === 2) {
+      openSheet(`
+        <h2>So läuft eine Woche</h2>
+        <ol class="steps">
+          <li><b>${liste ? "Aufgabe nehmen und erledigen." : "Deine Aufgabe erledigen."}</b> ${liste ? "Mit „Übernehme ich“ gehört sie dir. " : ""}Danach in der Woche auf „Erledigt“ tippen. Vertan? „Doch nicht erledigt“ macht es rückgängig.</li>
+          <li><b>Der Flurfunk zeigt es allen.</b> Die anderen können sich bedanken${S.settings.rating?.enabled ? " und es bewerten" : ""}.</li>
+          <li><b>Die Statistik zeigt, wer was gemacht hat.</b> Jede Aufgabe zählt so viele Punkte, wie sie Aufwand hat. Urlaubswochen zählen nicht.</li>
+        </ol>
+        <div class="row"><button type="button" class="btn" data-intro-skip>Ohne Tour loslegen</button><button type="button" class="btn primary" data-intro-tour>Kurze Tour starten</button></div>`);
+      return;
+    }
+    const card = (m, name, text) => `<div class="mode ${cur === m ? "cur" : ""}"><h3>${name}</h3><p>${text}</p>${cur === m ? `<span class="pill done">So macht ihr es gerade</span>` : ""}</div>`;
+    openSheet(`
+      <h2>Willkommen bei Flurfunk</h2>
+      <p class="lead">Flurfunk verteilt die Hausarbeit in eurer WG fair. Dafür gibt es zwei Arten:</p>
+      <div class="modes">
+        ${card("plan", "Putzplan", "Feste Reihenfolge: Jede Woche ist bei jeder Aufgabe jemand anderes dran. Wer im Urlaub ist, wird übersprungen. Wer nicht kann, tauscht oder sucht eine Vertretung.")}
+        ${card("liste", "Aufgabenliste", `Jeder nimmt sich selbst die Aufgaben, die er machen will. Was bis ${DAYS[S.settings.distDay]} 12 Uhr noch frei ist, geht an die, die in der Woche am wenigsten gemacht haben.`)}
+      </div>
+      <p class="hint">Bei beiden trägst du Erledigtes ein, und die Statistik zeigt, wer welche Aufgaben gemacht hat.</p>
+      ${isAdmin()
+        ? `<p class="hint">Du bist Admin. Umstellen kannst du das jederzeit unter Mehr → WG-Einstellungen.</p>
+      <div class="row">${["plan", "liste"].map(m => `<button type="button" class="btn ${cur === m ? "primary" : ""}" data-intro-mode="${m}">${cur === m ? "Weiter mit " : "Umstellen auf "}${m === "plan" ? "Putzplan" : "Aufgabenliste"}</button>`).join("")}</div>`
+        : `<div class="row"><button type="button" class="btn primary" data-intro="2">Weiter</button></div>`}`);
+  }
+  function setMode(m) {
+    const s = S.settings; if (s.mode === m) return;
+    s.mode = m;
+    if (m === "liste") { S.claims = {}; S.distributed = {}; }
+    post(S.me, m === "plan" ? "hat auf Putzplan mit fester Reihenfolge umgestellt." : "hat auf Aufgabenliste zum Selbernehmen umgestellt.");
+  }
 
   function feedView() {
     return `
@@ -1111,14 +1263,14 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   };
   function sheetMore() {
     const nVac = S.vacations.filter(v => v.status === "pending" && v.who !== S.me && !v.approvals.includes(S.me) && !v.rejections.includes(S.me)).length;
-    const items = [["urlaub", "Urlaub", nVac], ["hilfe", "Vertretungen", nOpenWg()], ["settings", "WG-Einstellungen"], ["ordnung", "Hausordnung"]];
-    openSheet(`<h2>Mehr</h2><div class="morelist">${items.map(([k, l, c]) => `<button type="button" data-tab="${k}"><span>${l}</span>${c ? `<span class="count pill help">${c}</span>` : `<span aria-hidden="true">›</span>`}</button>`).join("")}<button type="button" data-tour><span>Kurze Tour durch die App</span><span aria-hidden="true">›</span></button></div><div class="row"><button type="button" class="btn" data-close-btn>Schließen</button></div>`);
+    const items = [["urlaub", "Urlaub", nVac], ["hilfe", "Vertretungen", nOpenWg()], ["settings", "WG-Einstellungen"], ...(hasRules() ? [["ordnung", "Hausordnung"]] : [])];
+    openSheet(`<h2>Mehr</h2><div class="morelist">${items.map(([k, l, c]) => `<button type="button" data-tab="${k}"><span>${l}</span>${c ? `<span class="count pill help">${c}</span>` : `<span aria-hidden="true">›</span>`}</button>`).join("")}<button type="button" data-intro="1"><span>So funktioniert Flurfunk</span><span aria-hidden="true">›</span></button><button type="button" data-tour><span>Kurze Tour durch die App</span><span aria-hidden="true">›</span></button></div><div class="row"><button type="button" class="btn" data-close-btn>Schließen</button></div>`);
   }
 
   // ---------- Hilfe auf jeder Seite ----------
   const HELP = {
     woche: () => ["Hier steht alles, was diese Woche dran ist. Deine Aufgaben sind farbig markiert.",
-      "Fertig? Tipp bei deiner Aufgabe auf <b>Erledigt</b>. Foto oder Notiz sind freiwillig.",
+      "Fertig? Tipp bei deiner Aufgabe auf <b>Erledigt</b>. Foto oder Notiz sind freiwillig. Vertan? <b>Doch nicht erledigt</b> macht es rückgängig.",
       "Keine Zeit? <b>Schaffe ich nicht</b>: Dann tauschst du oder suchst eine Vertretung.",
       S.settings.mode === "liste" ? "Freie Aufgaben nimmst du dir mit <b>Übernehme ich</b>." : "Wer dran ist, wechselt jede Woche reihum. Wer im Urlaub ist, wird übersprungen.",
       "Mit <b>Zurück</b> und <b>Weiter</b> blätterst du durch die Wochen. Ganz unten legst du neue Aufgaben an."],
@@ -1136,7 +1288,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     settings: () => [isAdmin() ? "Was du hier änderst, gilt sofort für alle in der WG." : `Nur ${esc(P(S.settings.admin)?.short || "der Admin")} kann hier etwas ändern. Du kannst alles ansehen.`,
       "Unter <b>Aufgaben</b> legst du Aufgaben an, änderst sie oder übernimmst fertige Pakete.",
       "Mitbewohner lädst du mit dem Einladungscode ein."],
-    ordnung: () => ["Die wichtigsten Regeln der WG zum Nachlesen."]
+    ordnung: () => [isAdmin() ? "Du legst die Regeln an. Nimm Vorschläge und pass sie an oder schreib eigene. Ohne Regeln sehen die anderen diese Seite nicht." : "Die wichtigsten Regeln der WG zum Nachlesen."]
   };
   const helpOpen = {};
   function helpBox(tab) {
@@ -1152,6 +1304,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     { tab: "woche", sel: ".task.mine, .task", text: () => findEl(".task.mine") ? "Das ist eine deiner Aufgaben, sie ist farbig markiert. Wenn du fertig bist, tippst du auf <b>Erledigt</b>." : "Jede Karte ist eine Aufgabe, mit der Person, die dran ist. Deine eigenen sind farbig markiert, dort tippst du auf <b>Erledigt</b>." },
     { tab: "woche", sel: ".task.mine [data-cant], [data-claim]", text: () => findEl(".task.mine [data-cant]") ? "Keine Zeit? Mit <b>Schaffe ich nicht</b> tauschst du oder suchst eine Vertretung." : "Freie Aufgaben nimmst du dir mit <b>Übernehme ich</b>." },
     { sel: "#bnav [data-tab=plan], #tabs [data-tab=plan]", text: "Im Plan siehst du, wer in den nächsten Wochen dran ist." },
+    { sel: "#bnav [data-tab=stats], #tabs [data-tab=stats]", text: "Die Statistik zeigt, wer welche Aufgaben gemacht hat, mit Punkten nach Aufwand." },
     { sel: "#bnav [data-tab=feed], aside", text: "Im Flurfunk steht, was in der WG passiert. Mit <b>Danke</b> zeigst du, dass du es gesehen hast." },
     { sel: "#bnav [data-more], #tabs [data-tab=urlaub]", text: "Unter <b>Mehr</b> trägst du Urlaub ein, findest Vertretungen und die WG-Einstellungen." },
     { tab: "woche", sel: ".addtasks", text: "Ganz unten in der Woche legst du neue Aufgaben an oder übernimmst fertige Pakete." },
@@ -1207,6 +1360,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   function armIdle() { clearTimeout(idleTimer); idleTimer = setTimeout(onIdle, DEV.tour ? 25000 : 12000); }
   function onIdle() {
     if (TOURST || appMode() !== "wg" || $("#layer").innerHTML || document.hidden || uiBusy()) { armIdle(); return; }
+    if (!DEV.intro) { armIdle(); return; }
     if (!DEV.tour) { tourStart(); return; }
     const h = idleHint(); if (h && !hinted[h.id] && findEl(h.sel)) { hinted[h.id] = true; tourStart([h], true); }
   }
@@ -1393,19 +1547,20 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   const SYNC_BUILD = "wss://flurfunk.91-98-206-40.sslip.io/sync";
   const sameOriginSync = () => /^https?:$/.test(location.protocol) ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/sync` : "ws://localhost:8800/sync";
   const defaultSync = () => (!SYNC_BUILD || SYNC_BUILD.startsWith("__") ? sameOriginSync() : SYNC_BUILD);
-  let DEV = { code: null, local: null, server: { sync: "" }, tour: false, help: {} }; // server.sync leer = Standard
+  let DEV = { code: null, local: null, server: { sync: "" }, tour: false, help: {}, intro: false, nudgeDay: {}, nudgeSeen: 0, nudgeNotified: 0, remindDay: "" }; // server.sync leer = Standard
   const syncUrl = () => DEV.server.sync || defaultSync();
   // Felder aus älteren Versionen (frühere Server-Adressen, Anmeldungen) werden still übergangen
   function loadDevice() {
     try {
       const d = JSON.parse(localStorage.getItem(DEV_KEY));
-      if (d) DEV = { code: d.code || null, local: d.local || null, server: { sync: typeof d.server?.sync === "string" ? d.server.sync : "" }, tour: !!d.tour, help: d.help && typeof d.help === "object" ? d.help : {} };
+      if (d) DEV = { code: d.code || null, local: d.local || null, server: { sync: typeof d.server?.sync === "string" ? d.server.sync : "" }, tour: !!d.tour, help: d.help && typeof d.help === "object" ? d.help : {},
+        intro: !!d.intro, nudgeDay: d.nudgeDay && typeof d.nudgeDay === "object" ? d.nudgeDay : {}, nudgeSeen: Number(d.nudgeSeen) || 0, nudgeNotified: Number(d.nudgeNotified) || 0, remindDay: String(d.remindDay || "") };
     } catch {}
   }
   function saveDevice() { DEV.local = Object.fromEntries(LOCAL_KEYS.map(k => [k, S[k]])); try { localStorage.setItem(DEV_KEY, JSON.stringify(DEV)); } catch {} }
 
   // Leere WG-Felder, damit die Ansichten auch ohne WG funktionieren
-  const EMPTY = { meta: () => null, settings: () => DEFAULT_SETTINGS(null), parties: () => [], tasks: DEFAULT_TASKS, vacations: () => [], overrides: () => ({}), done: () => ({}), ratings: () => ({}), notes: () => ({}), claims: () => ({}), distributed: () => ({}), requests: () => [], feed: () => [], nudged: () => ({}), jobs: () => [] };
+  const EMPTY = { meta: () => null, settings: () => DEFAULT_SETTINGS(null), parties: () => [], tasks: DEFAULT_TASKS, vacations: () => [], overrides: () => ({}), done: () => ({}), ratings: () => ({}), notes: () => ({}), claims: () => ({}), distributed: () => ({}), requests: () => [], feed: () => [], nudged: () => ({}), jobs: () => [], rules: () => [], nudges: () => [] };
   const emptyHH = () => Object.fromEntries(HH_KEYS.map(k => [k, EMPTY[k]()]));
 
   // Wochen relativ <-> absolut (siehe active())
@@ -1419,7 +1574,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       jobs: (hh.jobs || []).map(j => (j.key ? { ...j, key: shiftKey(j.key, d) } : j)),
       requests: (hh.requests || []).map(r => ({ ...r, key: shiftKey(r.key, d), ...(r.back != null ? { back: r.back + d } : {}) })),
       vacations: (hh.vacations || []).map(v => ({ ...v, from: v.from + d, to: v.to + d })),
-      parties: (hh.parties || []).map(p => (Number.isFinite(p.joined) ? { ...p, joined: p.joined + d } : p))
+      parties: (hh.parties || []).map(p => (Number.isFinite(p.joined) ? { ...p, joined: p.joined + d } : p)),
+      nudges: (hh.nudges || []).map(n => ({ ...n, key: shiftKey(n.key, d) }))
     };
   }
 
@@ -1473,6 +1629,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     S.feed.forEach(f => { if (photos.has(f.id)) f.photo = photos.get(f.id); });
     S.feed.sort((a, b) => b.at - a.at);
     normalize();
+    notifyNudges();
     if (uiBusy()) pendingRender = true; else render();
   }
   // Fotos bleiben auf dem Gerät, auf dem sie aufgenommen wurden (zu groß für den Sync)
@@ -1484,7 +1641,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   }
   function normalize() {
     if (!S.settings) return;
-    S.notes ||= {}; S.settings.rating ||= DEFAULT_SETTINGS(null).rating; if (S.settings.rating.notes === undefined) S.settings.rating.notes = true;
+    S.notes ||= {}; S.rules ||= []; S.nudges ||= []; S.settings.nudge ||= { enabled: false, anonymous: true };
+    S.settings.rating ||= DEFAULT_SETTINGS(null).rating; if (S.settings.rating.notes === undefined) S.settings.rating.notes = true;
     // Ältere Daten können Aufträge an Leute außerhalb der WG enthalten: nur Vertretungen unter Mitbewohnern bleiben
     S.jobs = (S.jobs || []).filter(j => j.key && !j.ext && T(j.key.split(":")[0]) && (!j.taker || isMember(j.taker)) && !(j.status === "open" && j.to));
   }
@@ -1688,10 +1846,10 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     $("#sub").textContent = `${wgName()} · ${S.parties.length} Mitbewohner · ${S.settings.mode === "plan" ? "Putzplan" : "Aufgabenliste"}`;
     $("#tabs").hidden = false;
     const VIEWS = { woche: viewWoche, plan: viewPlan, stats: viewStats, urlaub: viewUrlaub, hilfe: viewHilfe, settings: viewSettings, ordnung: viewOrdnung, feed: viewFeed };
-    if (!VIEWS[S.tab]) S.tab = "woche"; // z. B. ein Tab aus einer älteren Version
+    if (!VIEWS[S.tab] || (S.tab === "ordnung" && !hasRules())) S.tab = "woche"; // z. B. ein Tab aus einer älteren Version
     const nOpen = nOpenWg();
     const nVac = S.vacations.filter(v => v.status === "pending" && v.who !== S.me && !v.approvals.includes(S.me) && !v.rejections.includes(S.me)).length;
-    const TABS = [["woche", "Woche"], ["plan", S.settings.mode === "plan" ? "Putzplan" : "Aufgabenliste"], ["stats", "Statistik"], ["urlaub", "Urlaub", nVac], ["hilfe", "Vertretungen", nOpen], ["settings", "WG-Einstellungen"], ["ordnung", "Hausordnung"]];
+    const TABS = [["woche", "Woche"], ["plan", S.settings.mode === "plan" ? "Putzplan" : "Aufgabenliste"], ["stats", "Statistik"], ["urlaub", "Urlaub", nVac], ["hilfe", "Vertretungen", nOpen], ["settings", "WG-Einstellungen"], ...(hasRules() ? [["ordnung", "Hausordnung"]] : [])];
     $("#tabs").innerHTML = TABS.map(([k, l, c]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}${c ? `<span class="count">${c}</span>` : ""}</button>`).join("");
     let v = VIEWS[S.tab]();
     if (!["woche", "stats"].includes(S.tab)) v = v.replace("</h1>", "</h1>" + helpBox(S.tab));
@@ -1702,6 +1860,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     $("#bnav").innerHTML = nb.map(([k, l, ic, c]) => `<button type="button" ${k === "more" ? "data-more" : `data-tab="${k}"`} ${(k === S.tab || (k === "more" && MORE.includes(S.tab))) ? 'aria-current="page"' : ""}>${ic}<span>${l}</span>${c ? `<span class="dot">${c}</span>` : ""}</button>`).join("");
     $("#bnav").hidden = false;
     armIdle();
+    if (!DEV.intro && !introShown && !$("#layer").innerHTML && !TOURST) { introShown = true; setTimeout(() => { if (!$("#layer").innerHTML) sheetIntro(1); }, 400); }
     if (TOURST) requestAnimationFrame(tourPlace);
     $("#app").innerHTML = wide ? `<div class="grid wide"><div class="main">${v}</div></div>` : `<div class="grid"><div class="main">${v}</div><aside>${feedView()}</aside></div>`;
     save();
@@ -1734,6 +1893,32 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     if (d.tourNext !== undefined) { if (TOURST) { TOURST.i++; tourShow(); } return; }
     if (d.tourEnd !== undefined) { tourEnd(true); return; }
     if (d.tour !== undefined) { tourStart(); return; }
+    if (d.intro) { sheetIntro(Number(d.intro)); return; }
+    if (d.introMode) { if (isAdmin()) setMode(d.introMode); sheetIntro(2); render(); return; }
+    if (d.introSkip !== undefined) { DEV.tour = true; saveDevice(); closeSheet(); render(); return; }
+    if (d.introTour !== undefined) { closeSheet(); S.tab = "woche"; render(); tourStart(); return; }
+    if (d.undone) {
+      const k = d.undone, [t] = splitKey(k), j = S.jobs.find(x => x.key === k && x.status === "done");
+      delete S.done[k]; delete S.ratings[k];
+      if (j) { j.status = "confirmed"; delete j.doneAt; }
+      post(S.me, `hat „${t.title}“ wieder auf nicht erledigt gestellt.`);
+      toast("Wieder offen. Melde es einfach erneut, wenn du fertig bist."); render(); return;
+    }
+    if (d.nudgeSeen !== undefined) { DEV.nudgeSeen = Math.max(DEV.nudgeSeen, ...nudgesForMe().map(n => n.at)); saveDevice(); render(); return; }
+    if (d.notif !== undefined) { Notification.requestPermission().then(p => { toast(p === "granted" ? "Benachrichtigungen sind an." : "Benachrichtigungen sind aus. Du siehst Erinnerungen weiter hier in der App."); render(); }); return; }
+    // Hausordnung (nur Admin)
+    if ((d.redit || d.rsave || d.rdelAsk || d.rdel || d.rsuggest !== undefined || d.rsuggestAdd !== undefined) && !isAdmin()) { toast("Nur der Admin kann die Hausordnung ändern."); return; }
+    if (d.redit) { sheetRule(d.redit); return; }
+    if (d.rsave) { if (saveRule(d.rsave)) { closeSheet(); render(); } return; }
+    if (d.rdelAsk) { const id = d.rdelAsk; b.textContent = "Wirklich löschen?"; delete b.dataset.rdelAsk; b.dataset.rdel = id; return; }
+    if (d.rdel) { const r = S.rules.find(x => x.id === d.rdel); S.rules = S.rules.filter(x => x.id !== d.rdel); if (r) post(S.me, `hat „${r.title}“ aus der Hausordnung entfernt.`); closeSheet(); toast("Regel gelöscht."); render(); return; }
+    if (d.rsuggest !== undefined) { sheetRuleSuggest(); return; }
+    if (d.rsuggestAdd !== undefined) {
+      const picked = [...document.querySelectorAll(".sheet input[data-ri]:checked")].map(el => RULE_SUGGEST[Number(el.dataset.ri)]).filter(([title]) => !S.rules.some(r => sameTitle(r.title, title)));
+      picked.forEach(([title, text]) => S.rules.push({ id: uid("r"), title, text }));
+      if (picked.length) post(S.me, `hat die Hausordnung um ${picked.length} ${picked.length === 1 ? "Regel" : "Regeln"} ergänzt.`);
+      closeSheet(); toast(picked.length ? `${picked.length} ${picked.length === 1 ? "Regel" : "Regeln"} übernommen.` : "Nichts ausgewählt."); render(); return;
+    }
     if (d.tsuggest !== undefined) { sheetSuggest(); return; }
     if (d.tsuggestSend !== undefined) { const t = $("#sg-text").value.trim(); if (!t) { toast("Bitte kurz beschreiben, was fehlt."); return; } post(S.me, `schlägt eine neue Aufgabe vor: „${t}“`); closeSheet(); toast("Vorschlag steht im Flurfunk."); render(); return; }
     // Aufgaben und Marktplatz (nur Admin)
@@ -1779,7 +1964,17 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     if (d.cancel) { const r = S.requests.find(x => x.id === d.cancel); if (r) r.status = "cancelled"; toast("Anfrage zurückgezogen."); render(); return; }
     if (d.jpaid) { const j = S.jobs.find(x => x.id === d.jpaid); j.paid = true; post(S.me, `hat ${P(j.taker).short} ${eur(j.price)} für ${jobTitle(j)} bezahlt.`); render(); return; }
     if (d.jdone) { pendingPhoto = null; sheetDone(null, d.jdone); return; }
-    if (d.nudge) { const [t, wk] = splitKey(d.nudge), who = assignee(t, wk); S.nudged[d.nudge + S.me] = true; post(S.me, `erinnert ${P(who).short} freundlich an ${t.title}.`); toast(`${P(who).short} bekommt eine freundliche Erinnerung.`); render(); return; }
+    if (d.nudge) {
+      const [t, wk] = splitKey(d.nudge), who = assignee(t, wk);
+      if (!who || !S.settings.nudge?.enabled) return;
+      if (!canNudge(who)) { toast(`${P(who).short} wurde heute schon angestupst.`); return; }
+      const anon = S.settings.nudge.anonymous !== false;
+      S.nudges = S.nudges.filter(n => n.at > now() - 14 * DAY);
+      S.nudges.push({ id: uid("n"), key: d.nudge, to: who, from: anon ? null : S.me, at: now() });
+      DEV.nudgeDay = { ...DEV.nudgeDay, [`${S.me}>${who}`]: dayStr() }; saveDevice();
+      post(anon ? "sys" : S.me, anon ? `${P(who).short} wurde an ${t.title} erinnert.` : `stupst ${P(who).short} wegen ${t.title} an.`);
+      toast(`${P(who).short} sieht die Erinnerung beim nächsten Öffnen von Flurfunk${anon ? ", ohne deinen Namen" : ""}.`); render(); return;
+    }
     if (d.thx) { const f = S.feed.find(x => x.id === d.thx); if (f) { const i = f.thanks.indexOf(S.me); i < 0 ? f.thanks.push(S.me) : f.thanks.splice(i, 1); } render(); return; }
     // Urlaub
     if (b.id === "u-save") {
@@ -1816,11 +2011,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     // Einstellungen (nur Admin)
     if (!isAdmin()) return;
     const s = S.settings; let changed = true;
-    if (el.name === "s-mode") {
-      s.mode = el.value;
-      if (s.mode === "liste") { S.claims = {}; S.distributed = {}; }
-      post(S.me, s.mode === "plan" ? "hat auf Putzplan mit fester Reihenfolge umgestellt." : "hat auf Aufgabenliste zum Selbernehmen umgestellt.");
-    }
+    if (el.name === "s-mode") setMode(el.value);
     else if (el.id === "s-dist") s.distDay = Number(el.value);
     else if (el.dataset.pts) T(el.dataset.pts).points = Number(el.value);
     else if (el.id === "s-r-on") s.rating.enabled = el.checked;
@@ -1828,6 +2019,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     else if (el.name === "s-r-who") s.rating.who = el.value;
     else if (el.id === "s-r-anon") s.rating.anonymous = el.checked;
     else if (el.id === "s-r-stats") s.rating.inStats = el.checked;
+    else if (el.id === "s-n-on") { s.nudge = { anonymous: true, ...(s.nudge || {}), enabled: el.checked }; post(S.me, el.checked ? "hat Anstupsen eingeschaltet." : "hat Anstupsen ausgeschaltet."); }
+    else if (el.name === "s-n-anon") s.nudge.anonymous = el.value === "1";
     else if (el.id === "s-v-weeks") s.vacation.weeks = Math.max(0, Math.min(12, Number(el.value) || 0));
     else if (el.name === "s-v-appr") { s.vacation.approval = el.value; S.vacations.filter(v => v.status === "pending").forEach(settleVacation); }
     else if (el.id === "s-admin") { s.admin = el.value; post(S.me, `hat ${P(el.value).short} zur Admin gemacht.`); }
