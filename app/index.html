@@ -287,6 +287,12 @@ footer button { background: none; border: 0; color: var(--muted); text-decoratio
 .bottom button[aria-current="page"] { color: var(--accent); }
 .bottom .dot { position: absolute; top: 4px; left: calc(50% + 8px); min-width: 16px; height: 16px; border-radius: 8px; background: var(--help); color: var(--surface); font-size: 10px; display: grid; place-items: center; padding: 0 4px; font-family: var(--f-mono); }
 .morelist { display: grid; gap: 6px; }
+.daypick { display: flex; gap: 6px; flex-wrap: wrap; }
+.daypick label { position: relative; }
+.daypick input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.daypick span { display: inline-grid; place-items: center; min-width: 44px; height: 40px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; }
+.daypick input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.daypick input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .morelist button { display: flex; justify-content: space-between; align-items: center; text-align: left; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 16px; font-weight: 600; cursor: pointer; }
 
 @media (max-width: 700px) {
@@ -438,6 +444,12 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   // Wie oft eine Aufgabe dran ist, in Wochen. offset verteilt seltene Aufgaben übers Jahr (Rest der absoluten Woche).
   const EVERY = [[1, "jede Woche"], [2, "alle 2 Wochen"], [3, "alle 3 Wochen"], [4, "monatlich"], [8, "alle 2 Monate"], [13, "vierteljährlich"], [26, "halbjährlich"], [52, "jährlich"]];
   const everyTxt = n => (EVERY.find(e => e[0] === n) || [0, `alle ${n} Wochen`])[1];
+  const DSHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+  // Mehrmals pro Woche: t.days = Wochentage. Jeder Tag ist eine eigene Einheit (id "aufgabe~tag") mit eigenem Termin und eigener Person.
+  const isMulti = t => Array.isArray(t.days) && t.days.length > 1;
+  const freqTxt = t => isMulti(t) ? `${t.days.length}× pro Woche (${t.days.slice().sort().map(d => DSHORT[d]).join(", ")})` : everyTxt(t.every || 1);
+  const unitOf = (t, d) => ({ ...t, id: `${t.id}~${d}`, base: t.id, due: d, every: 1, offset: 0, title: `${t.title} (${DSHORT[d]})` });
+  const units = t => isMulti(t) ? t.days.slice().sort().map(d => unitOf(t, d)) : [t];
   const PTS_TXT = ["leicht", "mittel", "aufwendig"];
   // Marktplatz: Aufgabenpakete zum Übernehmen. [Titel, Beschreibung, alle n Wochen, fällig bis Wochentag (0 = Mo), Aufwand]
   const PACKS = [
@@ -448,6 +460,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       ["Müll rausbringen", "Restmüll, Bio und Gelber Sack, wenn voll. Neue Tüten einlegen.", 1, 3, 1],
       ["Altpapier und Altglas wegbringen", "Zum Container oder in die Tonne.", 2, 5, 1],
       ["Staubwischen", "Regale, Fensterbänke, Lampen und Türrahmen.", 2, 5, 1],
+      ["Spülmaschine ausräumen", "Sauberes Geschirr in die Schränke, Geschirr aus der Spüle einräumen.", 1, 4, 1, [0, 1, 2, 3, 4]],
       ["Haushaltsvorrat auffüllen", "Spülmittel, Müllbeutel, Toilettenpapier und Putzmittel prüfen und nachkaufen.", 2, 4, 1]
     ] },
     { id: "jahr", name: "Grundreinigung übers Jahr", desc: "Seltene Aufgaben, die sonst vergessen werden. Sie werden über die Wochen verteilt.", tasks: [
@@ -580,7 +593,9 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   // Unbekannte Personen (z. B. aus älteren Daten) als Platzhalter, damit nichts abstürzt
   const UNKNOWN = id => ({ id, name: "Unbekannt", short: "Unbekannt", unknown: true });
   const P = id => S.parties.find(p => p.id === id) || (id && id !== "sys" ? UNKNOWN(id) : undefined);
-  const T = id => S.tasks.find(t => t.id === id);
+  const T = id => { const [b, d] = String(id).split("~"); const t = S.tasks.find(x => x.id === b); return !t || d === undefined ? t : unitOf(t, Number(d)); };
+  const TASKS = () => S.tasks.flatMap(units);
+  const ofTask = (k, tid) => k.startsWith(tid + ":") || k.startsWith(tid + "~");
   const keyOf = (tid, wk) => `${tid}:${wk}`;
   // Gelöschte Aufgaben: alte Einträge (Verlauf, Flurfunk) sollen weiter funktionieren
   const GONE = id => ({ id, title: "Gelöschte Aufgabe", detail: "", due: 6, every: 1, offset: 0, points: 1, doneText: "hat eine Aufgabe erledigt.", gone: true });
@@ -609,7 +624,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   // Feste Rotation über alle, die in dieser Woche da sind
   function planAssign(t, wk) {
     const pr = present(wk); if (!pr.length) return null;
-    const act = S.tasks.filter(x => active(x, wk)), i = act.indexOf(t), n = pr.length;
+    const act = TASKS().filter(x => active(x, wk)), i = Math.max(0, act.findIndex(x => x.id === t.id)), n = pr.length;
     return pr[(((wk + CUR + i + 2) % n) + n) % n].id;
   }
   function baseAssign(t, wk) {
@@ -633,13 +648,13 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
 
   // Aufgabenliste: Wer bekommt die übrigen Aufgaben? Die mit dem wenigsten Aufwand diese Woche.
   function weekLoad(id, wk) {
-    return S.tasks.filter(t => active(t, wk)).reduce((s, t) => { const k = keyOf(t.id, wk); return s + ((S.claims[k]?.by === id && !S.overrides[k]) || S.overrides[k]?.by === id || S.done[k]?.by === id ? t.points : 0); }, 0);
+    return TASKS().filter(t => active(t, wk)).reduce((s, t) => { const k = keyOf(t.id, wk); return s + ((S.claims[k]?.by === id && !S.overrides[k]) || S.overrides[k]?.by === id || S.done[k]?.by === id ? t.points : 0); }, 0);
   }
   function forecast(wk) {
     const pr = present(wk); if (!pr.length) return {};
     const load = Object.fromEntries(pr.map(p => [p.id, weekLoad(p.id, wk)]));
-    const recent = id => { let s = 0; for (let w = wk - 4; w < wk; w++) for (const t of S.tasks) if (S.done[keyOf(t.id, w)]?.by === id) s += t.points; return s; };
-    const open = S.tasks.filter(t => active(t, wk) && !assignee(t, wk) && !S.done[keyOf(t.id, wk)]).sort((a, b) => b.points - a.points);
+    const recent = id => { let s = 0; for (let w = wk - 4; w < wk; w++) for (const t of TASKS()) if (S.done[keyOf(t.id, w)]?.by === id) s += t.points; return s; };
+    const open = TASKS().filter(t => active(t, wk) && !assignee(t, wk) && !S.done[keyOf(t.id, wk)]).sort((a, b) => b.points - a.points);
     const out = {};
     for (const t of open) {
       const pick = pr.slice().sort((a, b) => load[a.id] - load[b.id] || recent(a.id) - recent(b.id))[0];
@@ -707,7 +722,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
 
   // ---------- Woche ----------
   function viewWoche() {
-    const wk = S.wk, list = S.tasks.filter(t => active(t, wk));
+    const wk = S.wk, list = TASKS().filter(t => active(t, wk));
     const liste = S.settings.mode === "liste";
     const meAway = onVac(S.me, wk);
     const away = S.parties.filter(p => onVac(p.id, wk));
@@ -777,7 +792,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       <p class="lead">${liste ? "Jeder nimmt sich in der Woche selbst Aufgaben. Hier siehst du, wer was gemacht hat und wer was übernommen hat." : "Die Aufgaben wechseln jede Woche reihum unter allen, die da sind. Wer im Urlaub ist, wird übersprungen."} Deine Felder sind markiert.</p>
       <div class="tablewrap"><table>
         <thead><tr><th>Aufgabe</th>${weeks.map(w => `<th class="wk ${w === 0 ? "cur" : ""}">${weekLabel(w)}</th>`).join("")}</tr></thead>
-        <tbody>${S.tasks.filter(t => weeks.some(w => active(t, w))).map(t => `<tr><th scope="row" style="color:var(--ink)">${esc(t.title)}</th>${weeks.map(w => {
+        <tbody>${TASKS().filter(t => weeks.some(w => active(t, w))).map(t => `<tr><th scope="row" style="color:var(--ink)">${esc(t.title)}</th>${weeks.map(w => {
           if (!active(t, w)) return `<td class="${w === 0 ? "cur" : ""}" style="color:var(--muted)">–</td>`;
           const k = keyOf(t.id, w), d = S.done[k], who = d ? d.by : assignee(t, w), ov = S.overrides[k], b = jobFor(k);
           if (!who) return `<td class="free ${w === 0 ? "cur" : ""}">frei</td>`;
@@ -789,7 +804,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         </tbody>
       </table></div>
       <p class="hint">● Aufwand pro Aufgabe, festgelegt in den WG-Einstellungen.</p>
-      ${(() => { const rare = S.tasks.filter(t => !weeks.some(w => active(t, w))).sort((a, b) => nextWeek(a) - nextWeek(b)); return rare.length ? `
+      ${(() => { const rare = TASKS().filter(t => !weeks.some(w => active(t, w))).sort((a, b) => nextWeek(a) - nextWeek(b)); return rare.length ? `
       <h2 class="section-title" style="font-size:19px;margin-top:18px">Seltene Aufgaben</h2>
       <ul class="ledger">${rare.map(t => `<li><span class="grow"><b>${esc(t.title)}</b><br><span class="hint">${everyTxt(t.every)}</span></span><span class="pill open">${weekLabel(nextWeek(t))}</span></li>`).join("")}</ul>` : ""; })()}`;
   }
@@ -805,12 +820,12 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       const rated = keys.flatMap(ratingsOfKey);
       const forOthers = keys.filter(k => ["paid", "swap"].includes(S.overrides[k]?.type)).length;
       const handed = S.jobs.filter(j => j.from === p.id && j.key && ["confirmed", "done"].includes(j.status) && splitKey(j.key)[1] >= from && splitKey(j.key)[1] <= to).length + S.requests.filter(r => r.from === p.id && r.status === "taken" && splitKey(r.key)[1] >= from).length;
-      const byTask = Object.fromEntries(S.tasks.map(t => [t.id, keys.filter(k => k.startsWith(t.id + ":")).length]));
+      const byTask = Object.fromEntries(S.tasks.map(t => [t.id, keys.filter(k => ofTask(k, t.id)).length]));
       return { p, n: keys.length, pts, vacW, presentW, perWeek: presentW ? pts / presentW : 0, avg: avgOf(rated), nRated: rated.length, forOthers, handed, byTask };
     });
     // Wie schnell wird eine Aufgabe erledigt (Tage nach Wochenbeginn)
     const speed = S.tasks.map(t => {
-      const ds = Object.keys(S.done).filter(k => k.startsWith(t.id + ":") && splitKey(k)[1] >= from).map(k => (S.done[k].at - weekStart(splitKey(k)[1]).getTime()) / DAY);
+      const ds = Object.keys(S.done).filter(k => ofTask(k, t.id) && splitKey(k)[1] >= from).map(k => (S.done[k].at - weekStart(splitKey(k)[1]).getTime()) / DAY);
       return { t, d: avgOf(ds) };
     });
     return { rows, speed, from, to, showRating: R.enabled && R.inStats };
@@ -955,7 +970,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         </section>
         <section class="set">
           <h2>Aufgaben (${S.tasks.length})</h2>
-          ${S.tasks.length ? S.tasks.map(t => `<div class="row trow"><span class="t" style="font-weight:600">${esc(t.title)}</span>${isAdmin() ? `<button type="button" class="btn small" data-tedit="${t.id}">Ändern</button>` : ""}<p>${everyTxt(t.every || 1)} · bis ${DAYS[t.due]} · ${"●".repeat(t.points)}${"○".repeat(3 - t.points)} ${PTS_TXT[t.points - 1]}${(t.every || 1) > 1 ? ` · nächstes Mal ${weekLabel(nextWeek(t))}` : ""}</p></div>`).join("") : `<p class="hint">Noch keine Aufgaben. Übernimm ein Paket oder lege selbst welche an.</p>`}
+          ${S.tasks.length ? S.tasks.map(t => `<div class="row trow"><span class="t" style="font-weight:600">${esc(t.title)}</span>${isAdmin() ? `<button type="button" class="btn small" data-tedit="${t.id}">Ändern</button>` : ""}<p>${isMulti(t) ? freqTxt(t) : `${everyTxt(t.every || 1)} · bis ${DAYS[t.due]}`} · ${"●".repeat(t.points)}${"○".repeat(3 - t.points)} ${PTS_TXT[t.points - 1]}${(t.every || 1) > 1 ? ` · nächstes Mal ${weekLabel(nextWeek(t))}` : ""}</p></div>`).join("") : `<p class="hint">Noch keine Aufgaben. Übernimm ein Paket oder lege selbst welche an.</p>`}
           ${isAdmin() ? `<div class="actions" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" data-market>Aufgabenpakete ansehen</button><button type="button" class="btn" data-tedit="new">Eigene Aufgabe anlegen</button></div>` : ""}
           <p class="hint">Der Aufwand bestimmt die Punkte in der Statistik und die Verteilung in der Aufgabenliste. Seltene Aufgaben werden über die Wochen verteilt, damit nicht alles auf einmal kommt.</p>
         </section>
@@ -1080,8 +1095,9 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       <h2>${id === "new" ? "Neue Aufgabe" : "Aufgabe ändern"}</h2>
       <div class="field"><label for="te-title">Name</label><input id="te-title" type="text" maxlength="60" value="${esc(t.title)}" placeholder="z. B. Boden saugen und wischen"></div>
       <div class="field"><label for="te-detail">Was gehört dazu? (optional)</label><textarea id="te-detail" rows="2" maxlength="240" placeholder="z. B. Alle Räume saugen, danach feucht wischen.">${esc(t.detail)}</textarea></div>
-      <div class="field"><label for="te-every">Wie oft?</label><select id="te-every">${opt(everyList, t.every || 1)}</select></div>
-      <div class="field"><label for="te-due">Erledigt bis</label><select id="te-due">${opt(DAYS.map((d, i) => [i, d]), t.due)}</select></div>
+      <div class="field"><label for="te-every">Wie oft?</label><select id="te-every">${opt([...everyList, ["m", "mehrmals pro Woche"]], isMulti(t) ? "m" : t.every || 1)}</select></div>
+      <div class="field" id="te-days-f" ${isMulti(t) ? "" : "hidden"}><span style="font-size:14px;font-weight:600">An welchen Tagen?</span><div class="daypick">${DSHORT.map((n, i) => `<label><input type="checkbox" data-day="${i}" ${(isMulti(t) ? t.days : [0, 1, 2, 3, 4]).includes(i) ? "checked" : ""}><span>${n}</span></label>`).join("")}</div><span class="hint">Jeder Tag ist eine eigene Aufgabe und kann an jemand anderen gehen.</span></div>
+      <div class="field" id="te-due-f" ${isMulti(t) ? "hidden" : ""}><label for="te-due">Erledigt bis</label><select id="te-due">${opt(DAYS.map((d, i) => [i, d]), t.due)}</select></div>
       <div class="field"><label for="te-pts">Aufwand</label><select id="te-pts">${opt([1, 2, 3].map(n => [n, `${"●".repeat(n)}${"○".repeat(3 - n)} ${PTS_TXT[n - 1]}`]), t.points)}</select></div>
       <div class="row">${id === "new" ? "" : `<button type="button" class="btn quiet" style="margin-right:auto;color:var(--late)" data-tdel-ask="${id}">Löschen</button>`}<button type="button" class="btn" data-close-btn>Abbrechen</button><button type="button" class="btn primary" data-tsave="${id}">Speichern</button></div>`);
     $("#te-title").focus();
@@ -1090,16 +1106,18 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     const title = $("#te-title").value.trim().replace(/\s+/g, " ");
     if (!title) { toast("Bitte einen Namen eingeben."); $("#te-title").focus(); return false; }
     if (S.tasks.some(x => x.id !== id && sameTitle(x.title, title))) { toast("Diese Aufgabe gibt es schon."); return false; }
-    const vals = { title, detail: $("#te-detail").value.trim(), every: Number($("#te-every").value), due: Number($("#te-due").value), points: Number($("#te-pts").value) };
+    const multi = $("#te-every").value === "m", days = [...document.querySelectorAll(".sheet [data-day]:checked")].map(el => Number(el.dataset.day));
+    if (multi && !days.length) { toast("Bitte mindestens einen Tag wählen."); return false; }
+    const vals = { title, detail: $("#te-detail").value.trim(), every: multi ? 1 : Number($("#te-every").value), due: multi ? days[days.length - 1] : Number($("#te-due").value), points: Number($("#te-pts").value), days: multi && days.length > 1 ? days : null };
     if (id === "new") {
-      const t = { id: uid("t"), ...vals, doneText: doneTextOf(title) };
+      const t = { id: uid("t"), ...vals, doneText: doneTextOf(title) }; if (!t.days) delete t.days;
       t.offset = spreadOffset(t, S.tasks); S.tasks.push(t);
-      post(S.me, `hat die Aufgabe „${title}“ angelegt (${everyTxt(t.every)}).`);
+      post(S.me, `hat die Aufgabe „${title}“ angelegt (${freqTxt(t)}).`);
       toast(t.every > 1 ? `Angelegt. Zum ersten Mal ${weekLabel(nextWeek(t))}.` : "Angelegt. Gilt ab dieser Woche.");
     } else {
       const t = T(id), everyChanged = t.every !== vals.every;
       if (t.title !== title) t.doneText = doneTextOf(title);
-      Object.assign(t, vals);
+      Object.assign(t, vals); if (!t.days) delete t.days;
       if (everyChanged) t.offset = spreadOffset(t, S.tasks);
       toast("Gespeichert. Gilt sofort für alle.");
     }
@@ -1109,7 +1127,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     const t = T(id); if (!t) return;
     S.tasks = S.tasks.filter(x => x.id !== id);
     // Offene Anfragen und Zuteilungen ab dieser Woche fallen weg, erledigte bleiben im Verlauf
-    const future = k => k.startsWith(id + ":") && Number(k.split(":")[1]) >= 0;
+    const future = k => ofTask(k, id) && Number(k.split(":")[1]) >= 0;
     for (const k of Object.keys(S.claims)) if (future(k)) delete S.claims[k];
     for (const k of Object.keys(S.overrides)) if (future(k)) delete S.overrides[k];
     S.jobs.forEach(j => { if (j.key && future(j.key) && ["open", "confirmed"].includes(j.status)) j.status = "cancelled"; });
@@ -1129,17 +1147,17 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     openSheet(`
       <h2>${esc(p.name)}</h2>
       <p class="lead">${esc(p.desc)} Den Aufwand und wie oft kannst du danach bei jeder Aufgabe ändern.</p>
-      <div class="choice">${p.tasks.map(([title, detail, every, due, pts], i) => { const has = S.tasks.some(t => sameTitle(t.title, title));
-        return `<label style="${has ? "opacity:.55" : ""}"><input type="checkbox" data-pi="${i}" ${has ? "disabled" : "checked"}><strong>${esc(title)}</strong><small>${has ? "Habt ihr schon" : `${everyTxt(every)} · ${"●".repeat(pts)}${"○".repeat(3 - pts)} ${PTS_TXT[pts - 1]} · ${esc(detail)}`}</small></label>`; }).join("")}</div>
+      <div class="choice">${p.tasks.map(([title, detail, every, due, pts, days], i) => { const has = S.tasks.some(t => sameTitle(t.title, title));
+        return `<label style="${has ? "opacity:.55" : ""}"><input type="checkbox" data-pi="${i}" ${has ? "disabled" : "checked"}><strong>${esc(title)}</strong><small>${has ? "Habt ihr schon" : `${freqTxt({ every, days })} · ${"●".repeat(pts)}${"○".repeat(3 - pts)} ${PTS_TXT[pts - 1]} · ${esc(detail)}`}</small></label>`; }).join("")}</div>
       <div class="row"><button type="button" class="btn" data-market>Zurück</button><button type="button" class="btn primary" data-pack-add="${p.id}">Ausgewählte übernehmen</button></div>`);
   }
   function addPack(pid) {
     const p = PACKS.find(x => x.id === pid); if (!p) return 0;
     const picked = [...document.querySelectorAll(".sheet input[data-pi]:checked")].map(el => p.tasks[Number(el.dataset.pi)]);
     let n = 0;
-    for (const [title, detail, every, due, points] of picked) {
+    for (const [title, detail, every, due, points, days] of picked) {
       if (S.tasks.some(t => sameTitle(t.title, title))) continue;
-      const t = { id: uid("t"), title, detail, every, due, points, doneText: doneTextOf(title) };
+      const t = { id: uid("t"), title, detail, every, due, points, doneText: doneTextOf(title), ...(days ? { days } : {}) };
       t.offset = spreadOffset(t, S.tasks); S.tasks.push(t); n++;
     }
     if (n) post(S.me, `hat ${n} ${n === 1 ? "Aufgabe" : "Aufgaben"} aus dem Paket „${p.name}“ übernommen.`);
@@ -1641,6 +1659,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     const el = e.target;
     // Beispiel-WG: Ansicht wechseln (in einer echten WG ist jedes Gerät eine Person)
     if (el.id === "me") { switchIdentity(el.value); return; }
+    if (el.id === "te-every") { const m = el.value === "m"; $("#te-days-f").hidden = !m; $("#te-due-f").hidden = m; return; }
     if (el.name === "how") document.querySelectorAll(".subopt").forEach(s => { s.hidden = s.dataset.for !== el.value; });
     if (el.id === "u-from" || el.id === "u-len") { $("#u-preview").textContent = vacPreview(Number($("#u-from").value), Number($("#u-len").value)); return; }
     if (el.id === "d-photo") {
