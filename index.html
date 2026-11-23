@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flurfunk Hausplan</title>
+<meta name="description" content="Putzplan, Urlaub und Vertretungen für eure WG. Kostenlos, ohne Konto, Ende-zu-Ende verschlüsselt.">
+<meta name="theme-color" content="#F5F5F2">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./"><img src="logo.svg" alt="" width="32" height="32"> Flurfunk</a>
+  <a class="btn small" href="app/">App öffnen</a>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="kicker"><span class="dot" aria-hidden="true"></span>Hausplan · füreinander da</p>
+    <h1>Eure WG, gut abgesprochen.</h1>
+    <p class="lead">Putzplan, Urlaub, Vertretungen und ein kleiner Flurfunk für Neuigkeiten. Kostenlos, ohne Konto und Ende-zu-Ende verschlüsselt.</p>
+    <div class="actions">
+      <a class="btn primary" href="app/">WG gründen</a>
+      <a class="btn" href="app/">Mit Code beitreten</a>
+    </div>
+    <p class="hint">Läuft im Browser auf Handy und Laptop. Zum Startbildschirm hinzufügen, dann fühlt es sich an wie eine App.</p>
+  </section>
+
+  <section class="features" aria-label="Was Flurfunk kann">
+    <article>
+      <h2>Putzplan, der sich weiterdreht</h2>
+      <p>Treppe, Müll, Küche: Jede Woche ist jemand anderes dran. Wer im Urlaub ist, wird übersprungen.</p>
+    </article>
+    <article>
+      <h2>Schaffe ich nicht</h2>
+      <p>Bitte um Vertretung oder tausch die Woche mit jemandem. Die anderen sehen es sofort.</p>
+    </article>
+    <article>
+      <h2>Erledigt und Danke</h2>
+      <p>Kurz abhaken, die WG sieht es im Flurfunk und kann sich bedanken. Wer mag, bewertet.</p>
+    </article>
+    <article>
+      <h2>Fair verteilt</h2>
+      <p>Die Statistik zeigt, wer wie viel gemacht hat. Ohne Punkte-Drama, einfach zum Nachschauen.</p>
+    </article>
+  </section>
+
+  <section class="steps">
+    <p class="kicker mono">So geht's</p>
+    <ol>
+      <li><b>WG gründen.</b> Name der WG und dein Name, fertig. Kein Konto, keine E-Mail.</li>
+      <li><b>Code teilen.</b> Du bekommst einen Einladungscode (auch als QR-Code). Zeig ihn deinen Mitbewohnern.</li>
+      <li><b>Loslegen.</b> Alle sehen denselben Plan. Änderungen kommen bei den anderen an, auch wenn ihr Handy gerade aus ist.</li>
+    </ol>
+  </section>
+
+  <section class="privacy">
+    <div>
+      <p class="kicker mono">Datenschutz</p>
+      <h2>Wir können eure Daten nicht lesen.</h2>
+      <p>Eure WG-Daten werden auf euren Geräten verschlüsselt, bevor sie zum Abgleich auf unseren Server gehen. Der Schlüssel steckt im Einladungscode, und den bekommt der Server nie. Er sieht nur verschlüsselte Pakete und wann sie ankommen.</p>
+      <ul>
+        <li>Keine Konten, keine E-Mail-Adressen, keine Telefonnummern</li>
+        <li>Keine Werbung, kein Tracking, keine Cookies</li>
+        <li>Server in Deutschland</li>
+        <li>Unbenutzte WGs löschen sich nach 180 Tagen vom Server</li>
+      </ul>
+      <p class="hint">Wichtig: Wer den Code kennt, gehört zur WG. Teilt ihn nur mit Leuten, die bei euch wohnen.</p>
+    </div>
+    <div class="lock" aria-hidden="true">
+      <span class="mono">AES-256 · GCM</span>
+      <svg viewBox="0 0 120 120"><rect x="26" y="52" width="68" height="52" rx="12"/><path d="M40 52V38a20 20 0 0 1 40 0v14" fill="none"/><circle cx="60" cy="78" r="7"/></svg>
+    </div>
+  </section>
+
+  <section class="install">
+    <p class="kicker mono">Auf dem Handy</p>
+    <h2>Zum Startbildschirm hinzufügen</h2>
+    <div class="cols">
+      <div><h3>Android (Chrome)</h3><p>App öffnen, oben rechts auf <b>⋮</b> tippen, dann <b>App installieren</b> oder <b>Zum Startbildschirm hinzufügen</b>.</p></div>
+      <div><h3>iPhone (Safari)</h3><p>App öffnen, unten auf <b>Teilen</b> tippen, dann <b>Zum Home-Bildschirm</b>.</p></div>
+    </div>
+  </section>
+
+  <section class="faq">
+    <h2>Fragen</h2>
+    <details><summary>Was kostet Flurfunk?</summary><p>Nichts. Flurfunk ist ein kleines Projekt ohne Werbung.</p></details>
+    <details><summary>Was passiert, wenn ich mein Handy verliere?</summary><p>Die Daten eurer WG liegen verschlüsselt auf dem Server und auf den Geräten der anderen. Lass dir den Code von einem Mitbewohner zeigen und tritt auf dem neuen Handy wieder bei.</p></details>
+    <details><summary>Jemand zieht aus. Und jetzt?</summary><p>Die Person verlässt die WG in der App. Den Einladungscode kennt sie aber weiterhin. Wenn euch das stört, gründet eine neue WG mit neuem Code. Einen Code-Wechsel per Knopfdruck gibt es noch nicht.</p></details>
+    <details><summary>Funktioniert es auch offline?</summary><p>Ja. Ohne Netz arbeitet die App mit dem, was auf dem Gerät liegt. Sobald wieder Netz da ist, wird abgeglichen.</p></details>
+  </section>
+</main>
+
+<footer class="foot">
+  <span class="mono">Flurfunk 1.0</span>
+  <nav><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></nav>
+</footer>
+</body>
+</html>
