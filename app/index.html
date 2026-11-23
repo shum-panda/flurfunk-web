@@ -133,6 +133,8 @@ h2.sub-title { font-size: 17px; font-weight: 700; margin-top: 8px; }
 .pill.late { background: var(--late-soft); color: var(--late); }
 .pill.help { background: var(--help-soft); color: var(--help); }
 .pill.vac { background: var(--vac-soft); color: var(--vac); }
+.pointsbox { display: grid; gap: 8px; }
+.pointsbox h2 { font-size: 19px; font-weight: 700; }
 .pill.today { background: var(--help-soft); color: var(--help); }
 .banner.remind { background: var(--help-soft); border-color: transparent; }
 .banner.remind .actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -462,7 +464,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   let S;
   const KEY = "flurfunk-proto-v8"; // alter Speicherort vor dem Sync-Umbau, wird einmalig übernommen
   // jobs = Vertretungen unter Mitbewohnern
-  const HH_KEYS = ["meta", "settings", "parties", "tasks", "vacations", "overrides", "done", "ratings", "notes", "claims", "distributed", "requests", "feed", "nudged", "jobs", "rules", "nudges"];
+  const HH_KEYS = ["meta", "settings", "parties", "tasks", "vacations", "overrides", "done", "ratings", "notes", "claims", "distributed", "requests", "feed", "nudged", "jobs", "rules", "nudges", "ledger"];
   const LOCAL_KEYS = ["me", "tab", "wk", "statRange"];
   const DEFAULT_TASKS = () => [
     { id: "treppe", title: "Treppenhaus wischen", detail: "Alle Etagen feucht wischen, Geländer und Briefkästen abwischen.", due: 5, every: 1, points: 3, price: 15, doneText: "hat das Treppenhaus gewischt." },
@@ -523,7 +525,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       ["Dachrinne und Abflüsse prüfen", "Laub entfernen, im Frühjahr und im Herbst.", 26, 5, 3]
     ] }
   ];
-  const DEFAULT_SETTINGS = admin => ({ admin, mode: "plan", distDay: 3, rating: { enabled: true, who: "alle", anonymous: true, inStats: true, notes: true }, vacation: { weeks: 4, approval: "one" }, nudge: { enabled: false, anonymous: true } });
+  const DEFAULT_SETTINGS = admin => ({ admin, mode: "plan", distDay: 3, rating: { enabled: true, who: "alle", anonymous: true, inStats: true, notes: true }, vacation: { weeks: 4, approval: "one" }, nudge: { enabled: false, anonymous: true }, points: { enabled: true } });
   const uid = p => p + now().toString(36) + Math.random().toString(36).slice(2, 7);
   const localDefaults = () => ({ me: null, tab: "woche", wk: 0, statRange: 12 });
 
@@ -536,7 +538,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       parties: [{ id: me, name: myName, short: myName.split(" ")[0], flat: "" }],
       tasks: DEFAULT_TASKS(), vacations: [], overrides: {}, done: {}, ratings: {}, notes: {}, claims: {}, distributed: {},
       requests: [], feed: [{ id: uid("f"), at: now(), by: me, text: `hat ${name} in Flurfunk angelegt.`, thanks: [] }],
-      nudged: {}, jobs: [], rules: [], nudges: []
+      nudged: {}, jobs: [], rules: [], nudges: [], ledger: []
     };
   }
 
@@ -569,6 +571,11 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       ],
       overrides: {}, done: {}, ratings: {}, notes: {}, claims: {}, distributed: {},
       requests: [], feed: [], nudged: {}, nudges: [],
+      // Punktekonto: Klaus und Jonas haben überfällige Aufgaben liegen lassen, Lena und Mehmet haben sie übernommen
+      ledger: [
+        { id: "l1", at: t - 9 * DAY, from: "w2", to: "w4", pts: 3, key: "treppe:-2", type: "rescue" },
+        { id: "l2", at: t - 3 * DAY, from: "w5", to: "w3", pts: 2, key: "hof:-1", type: "rescue" }
+      ],
       rules: RULES.map(([title, text], i) => ({ id: "r" + i, title, text })),
       // Vertretungen unter Mitbewohnern
       jobs: []
@@ -766,7 +773,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     const fc = liste ? forecast(wk) : {};
     let banner = "";
     if (meAway) banner = `<div class="banner vac"><span>Du bist ${wk === 0 ? "diese Woche" : "in dieser Woche"} im Urlaub. Du hast keine Aufgaben, und in der Statistik zählt die Woche nicht.</span></div>`;
-    else if (wk >= 0) banner = `<div class="banner"><span>${mine.length ? `Du hast ${wk === 0 ? "diese Woche" : "in dieser Woche"} <b>${mine.length} ${mine.length === 1 ? "Aufgabe" : "Aufgaben"}</b> offen.` : `Du hast ${wk === 0 ? "diese Woche" : "in dieser Woche"} nichts offen.`}${nHelp && wk === 0 ? ` ${nHelp === 1 ? "Jemand sucht" : `${nHelp} suchen`} eine Vertretung.` : ""}</span>${nHelp && wk === 0 ? `<button type="button" class="btn help" data-tab="hilfe">Ansehen</button>` : ""}</div>`;
+    else if (wk >= 0) banner = `<div class="banner"><span>${mine.length ? `Du hast ${wk === 0 ? "diese Woche" : "in dieser Woche"} <b>${mine.length} ${mine.length === 1 ? "Aufgabe" : "Aufgaben"}</b> offen.` : `Du hast ${wk === 0 ? "diese Woche" : "in dieser Woche"} nichts offen.`}${ptsOn() && wk === 0 && balance(S.me) ? ` Dein Punktekonto: <b>${fmtPts(balance(S.me))}</b>.` : ""}${nHelp && wk === 0 ? ` ${nHelp === 1 ? "Jemand sucht" : `${nHelp} suchen`} eine Vertretung.` : ""}</span>${nHelp && wk === 0 ? `<button type="button" class="btn help" data-tab="hilfe">Ansehen</button>` : ""}</div>`;
     const vacBanner = away.length && !meAway ? `<div class="banner vac"><span>${away.map(p => esc(p.short)).join(", ")} ${away.length === 1 ? "ist" : "sind"} im Urlaub. Die Aufgaben sind auf ${present(wk).length} Personen verteilt.</span></div>` : "";
     const listBanner = liste && wk >= 0 && free.length ? `<div class="banner list"><span><b>Aufgabenliste:</b> Nimm dir, was du machen willst. Was bis ${DAYS[S.settings.distDay]}, 12 Uhr frei ist, geht an die, die diese Woche am wenigsten gemacht haben.</span>${isAdmin() && wk === 0 ? `<button type="button" class="btn small" data-distribute="0">Jetzt verteilen (Demo)</button>` : ""}</div>` : "";
     return `
@@ -809,9 +816,15 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         ? `<button type="button" class="btn quiet" data-nudge="${k}">Anstupsen</button>`
         : `<button type="button" class="btn quiet" disabled title="Jede Person kann einmal am Tag angestupst werden.">Heute schon angestupst</button>`);
     }
+    if (!d && wk >= -1 && ptsOn() && !meAway) {
+      if (who && who !== S.me && !b && !r && dueDate(t, wk) < new Date()) acts.push(`<button type="button" class="btn help" data-rescue="${k}">Übernehmen (+${t.points} ${ptsWord(t.points)})</button>`);
+      if (isMine && who === S.me && !b && !r && wk >= 0 && !(ov?.type === "pass" && ov.by === S.me) && spendable(S.me) >= t.points && passTargets(wk).length) acts.push(`<button type="button" class="btn quiet" data-pass="${k}">Abgeben für ${t.points} ${ptsWord(t.points)}</button>`);
+    }
     if (d && wk >= -1 && (d.by === S.me || isAdmin())) acts.push(`<button type="button" class="btn quiet" data-undone="${k}">Doch nicht erledigt</button>`);
     let byline = who ? `<b>${esc(youOr(who))}</b>` : `<b>Noch frei</b>`;
     if (b?.status === "confirmed" || b?.status === "done") byline += ` · Vertretung für ${esc(youOr(b.from))}`;
+    else if (ov?.type === "rescue") byline += ` · übernommen, war bei ${esc(youOr(ov.from))} überfällig`;
+    else if (ov?.type === "pass") byline += ` · bekommen von ${esc(youOr(ov.from))} für Punkte`;
     else if (ov?.type === "swap") byline += " · getauscht";
     else if (cl?.auto) byline += " · automatisch zugeteilt";
     const forecastLine = !who && !d && fc[k] ? `<p class="hint" style="grid-column:2">Geht am ${DAYS[S.settings.distDay]} an ${esc(youOr(fc[k]))}, wenn sie bis dahin niemand nimmt.</p>` : "";
@@ -896,6 +909,11 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         ${D.showRating ? `<div class="card"><h3>Ø Bewertung WG</h3><span class="amt">${allR.length ? num1(avgOf(allR)) : "–"}</span><span class="hint">${allR.length} Bewertungen</span></div>` : ""}
         <div class="card"><h3>Urlaubswochen</h3><span class="amt">${D.rows.reduce((s, r) => s + r.vacW, 0)}</span><span class="hint">werden nicht mitgezählt</span></div>
       </div>
+      ${ptsOn() ? `<section class="pointsbox">
+        <h2>Punktekonto</h2>
+        <p class="hint">Wer eine überfällige Aufgabe von jemandem übernimmt und erledigt, bekommt ihre Punkte von dieser Person. Mit Pluspunkten kannst du eigene Aufgaben an jemanden im Minus abgeben.</p>
+        <ul class="ledger">${S.parties.slice().sort((a, b) => balance(b.id) - balance(a.id)).map(p => { const n = balance(p.id); return `<li>${avatar(p.id)}<span class="grow"><b>${esc(youOr(p.id))}</b></span><span class="pill ${n < 0 ? "late" : n > 0 ? "done" : "open"}">${fmtPts(n)}</span></li>`; }).join("")}</ul>
+      </section>` : ""}
 
       <section class="panel">
         <h2>Aufwand pro anwesender Woche</h2>
@@ -1013,6 +1031,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
           </div>
           <p class="hint">${s.mode === "plan" ? "Jede Woche ist eine andere Person dran. Wer im Urlaub ist, wird übersprungen." : "Jeder nimmt sich in der Woche Aufgaben selbst. Was übrig bleibt, wird an die verteilt, die am wenigsten Aufwand hatten."}</p>
           ${s.mode === "liste" ? `<div class="row"><label class="t" for="s-dist">Übrige Aufgaben verteilen am</label><select id="s-dist" class="sm" ${dis}>${[2, 3, 4].map(d => `<option value="${d}" ${s.distDay === d ? "selected" : ""}>${DAYS[d]}, 12 Uhr</option>`).join("")}</select></div>` : ""}
+          ${sw("s-p-on", s.points?.enabled !== false, "Überfällige Aufgaben übernehmen und Punkte sammeln", "Ist eine Aufgabe überfällig, kann jemand anderes sie übernehmen und bekommt beim Erledigen ihre Punkte von der Person, die dran war. Wer im Plus ist, kann eigene Aufgaben an Mitbewohner im Minus abgeben.")}
         </section>
         <section class="set">
           <h2>Aufgaben (${S.tasks.length})</h2>
@@ -1158,6 +1177,26 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       <div class="row"><button type="button" class="btn" data-close-btn>Abbrechen</button><button type="button" class="btn primary" data-rsuggest-add>Ausgewählte übernehmen</button></div>`);
   }
 
+  // ---------- Punktekonto ----------
+  // Wer eine überfällige Aufgabe von jemandem übernimmt und erledigt, bekommt deren Punkte (rescue).
+  // Wer im Plus ist, kann eigene Aufgaben an jemanden im Minus abgeben; erledigt die Person sie, gehen die Punkte zu ihr (pass).
+  // Gebucht wird erst beim Erledigen. Die Summe aller Konten ist immer 0.
+  const ptsOn = () => S.settings.points?.enabled !== false;
+  const balance = id => S.ledger.reduce((sum, e) => sum + (e.to === id ? e.pts : 0) - (e.from === id ? e.pts : 0), 0);
+  const pendingPass = id => Object.entries(S.overrides).filter(([k, o]) => o.type === "pass" && o.from === id && !S.done[k]).reduce((sum, [k]) => sum + splitKey(k)[0].points, 0);
+  const spendable = id => balance(id) - pendingPass(id);
+  const fmtPts = n => (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n);
+  const ptsWord = n => n === 1 ? "Punkt" : "Punkte";
+  const passTargets = wk => present(wk).filter(p => p.id !== S.me && balance(p.id) < 0);
+  function sheetPass(k) {
+    const [t, wk] = splitKey(k), targets = passTargets(wk);
+    openSheet(`
+      <h2>${esc(t.title)} abgeben</h2>
+      <p class="lead">Du hast ${fmtPts(balance(S.me))} Punkte. Gib die Aufgabe an jemanden im Minus. Erledigt die Person sie, ${t.points === 1 ? "geht 1 Punkt" : `gehen ${t.points} Punkte`} von dir zu ihr.</p>
+      <div class="choice" role="radiogroup">${targets.map((p, i) => `<label><input type="radio" name="pass-to" value="${p.id}" ${i === 0 ? "checked" : ""}><strong>${esc(p.short)}</strong><small>Punktekonto ${fmtPts(balance(p.id))}</small></label>`).join("")}</div>
+      <div class="row"><button type="button" class="btn" data-close-btn>Abbrechen</button><button type="button" class="btn primary" data-pass-go="${k}">Abgeben</button></div>`);
+  }
+
   // ---------- Erinnerungen und Anstupsen ----------
   const dayStr = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   const canNudge = who => DEV.nudgeDay?.[`${S.me}>${who}`] !== dayStr();
@@ -1214,6 +1253,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
           <li><b>${liste ? "Aufgabe nehmen und erledigen." : "Deine Aufgabe erledigen."}</b> ${liste ? "Mit „Übernehme ich“ gehört sie dir. " : ""}Danach in der Woche auf „Erledigt“ tippen. Vertan? „Doch nicht erledigt“ macht es rückgängig.</li>
           <li><b>Der Flurfunk zeigt es allen.</b> Die anderen können sich bedanken${S.settings.rating?.enabled ? " und es bewerten" : ""}.</li>
           <li><b>Die Statistik zeigt, wer was gemacht hat.</b> Jede Aufgabe zählt so viele Punkte, wie sie Aufwand hat. Urlaubswochen zählen nicht.</li>
+          ${ptsOn() ? `<li><b>Liegen gebliebenes ausgleichen.</b> Überfällige Aufgaben kann jemand anderes übernehmen und bekommt die Punkte. Mit Pluspunkten gibst du eigene Aufgaben an jemanden im Minus ab.</li>` : ""}
         </ol>
         <div class="row"><button type="button" class="btn" data-intro-skip>Ohne Tour loslegen</button><button type="button" class="btn primary" data-intro-tour>Kurze Tour starten</button></div>`);
       return;
@@ -1272,6 +1312,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     woche: () => ["Hier steht alles, was diese Woche dran ist. Deine Aufgaben sind farbig markiert.",
       "Fertig? Tipp bei deiner Aufgabe auf <b>Erledigt</b>. Foto oder Notiz sind freiwillig. Vertan? <b>Doch nicht erledigt</b> macht es rückgängig.",
       "Keine Zeit? <b>Schaffe ich nicht</b>: Dann tauschst du oder suchst eine Vertretung.",
+      "Ist bei jemand anderem etwas überfällig, kannst du es <b>übernehmen</b> und bekommst die Punkte. Mit Pluspunkten gibst du eigene Aufgaben an jemanden im Minus ab.",
       S.settings.mode === "liste" ? "Freie Aufgaben nimmst du dir mit <b>Übernehme ich</b>." : "Wer dran ist, wechselt jede Woche reihum. Wer im Urlaub ist, wird übersprungen.",
       "Mit <b>Zurück</b> und <b>Weiter</b> blätterst du durch die Wochen. Ganz unten legst du neue Aufgaben an."],
     plan: () => ["Hier siehst du, wer in den nächsten Wochen welche Aufgabe hat. Deine Felder sind markiert.",
@@ -1280,7 +1321,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     feed: () => ["Der Flurfunk zeigt, was in der WG passiert: erledigte Aufgaben, Anfragen, Urlaub und Änderungen.",
       "Mit <b>Danke</b> zeigst du, dass du es gesehen hast."],
     stats: () => ["Wer wie viel gemacht hat. Jede Aufgabe zählt so viele Punkte, wie sie Aufwand hat (●).",
-      "Wochen im Urlaub zählen nicht mit, damit niemand dadurch schlechter dasteht."],
+      "Wochen im Urlaub zählen nicht mit, damit niemand dadurch schlechter dasteht.",
+      "Das <b>Punktekonto</b> zeigt, wer für andere eingesprungen ist (Plus) und wer Aufgaben hat liegen lassen (Minus)."],
     urlaub: () => ["Trag hier ein, wann du nicht da bist. In der Zeit bekommst du keine Aufgaben, die anderen übernehmen.",
       "Standardurlaub gilt sofort. Für mehr Urlaub müssen die anderen zustimmen."],
     hilfe: () => ["Hier stehen Aufgaben, die jemand abgeben möchte. Mit <b>Übernehmen</b> springst du ein.",
@@ -1349,6 +1391,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   function idleHint() {
     if (S.tab === "woche" && S.wk === 0) {
       if (findEl(".task.mine [data-done]")) return { id: "done", sel: ".task.mine [data-done]", text: "Schon fertig? Tipp auf <b>Erledigt</b>, dann sehen es die anderen im Flurfunk." };
+      if (findEl("[data-rescue]")) return { id: "rescue", sel: "[data-rescue]", text: "Diese Aufgabe ist überfällig. Übernimmst du sie, bekommst du ihre Punkte." };
       if (findEl("[data-claim]")) return { id: "claim", sel: "[data-claim]", text: "Diese Aufgabe ist noch frei. Mit <b>Übernehme ich</b> gehört sie dir." };
     }
     if (S.tab === "settings" && isAdmin()) return { id: "market", sel: "[data-market]", text: "Hier findest du fertige Aufgabenpakete, zum Beispiel für die Grundreinigung übers Jahr." };
@@ -1522,6 +1565,11 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     const [t] = splitKey(k), j = jobFor(k);
     if (j?.taker === S.me && j.status === "confirmed") { markJobDone(j, note, photo); return; }
     S.done[k] = { at: now(), by: S.me };
+    const ov = S.overrides[k];
+    if (ptsOn() && ov && ["rescue", "pass"].includes(ov.type) && ov.by === S.me && ov.from && ov.from !== S.me) {
+      S.ledger.push({ id: uid("l"), at: now(), from: ov.from, to: S.me, pts: t.points, key: k, type: ov.type });
+      setTimeout(() => toast(`+${t.points} ${ptsWord(t.points)} von ${P(ov.from).short}. Dein Punktekonto: ${fmtPts(balance(S.me))}.`), 50);
+    }
     if (S.settings.mode === "liste" && !S.claims[k] && !S.overrides[k]) S.claims[k] = { by: S.me, at: now() };
     const r = swapFor(k); if (r) r.status = "cancelled";
     if (j && j.status !== "done") cancelJob(j);
@@ -1560,7 +1608,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   function saveDevice() { DEV.local = Object.fromEntries(LOCAL_KEYS.map(k => [k, S[k]])); try { localStorage.setItem(DEV_KEY, JSON.stringify(DEV)); } catch {} }
 
   // Leere WG-Felder, damit die Ansichten auch ohne WG funktionieren
-  const EMPTY = { meta: () => null, settings: () => DEFAULT_SETTINGS(null), parties: () => [], tasks: DEFAULT_TASKS, vacations: () => [], overrides: () => ({}), done: () => ({}), ratings: () => ({}), notes: () => ({}), claims: () => ({}), distributed: () => ({}), requests: () => [], feed: () => [], nudged: () => ({}), jobs: () => [], rules: () => [], nudges: () => [] };
+  const EMPTY = { meta: () => null, settings: () => DEFAULT_SETTINGS(null), parties: () => [], tasks: DEFAULT_TASKS, vacations: () => [], overrides: () => ({}), done: () => ({}), ratings: () => ({}), notes: () => ({}), claims: () => ({}), distributed: () => ({}), requests: () => [], feed: () => [], nudged: () => ({}), jobs: () => [], rules: () => [], nudges: () => [], ledger: () => [] };
   const emptyHH = () => Object.fromEntries(HH_KEYS.map(k => [k, EMPTY[k]()]));
 
   // Wochen relativ <-> absolut (siehe active())
@@ -1575,7 +1623,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       requests: (hh.requests || []).map(r => ({ ...r, key: shiftKey(r.key, d), ...(r.back != null ? { back: r.back + d } : {}) })),
       vacations: (hh.vacations || []).map(v => ({ ...v, from: v.from + d, to: v.to + d })),
       parties: (hh.parties || []).map(p => (Number.isFinite(p.joined) ? { ...p, joined: p.joined + d } : p)),
-      nudges: (hh.nudges || []).map(n => ({ ...n, key: shiftKey(n.key, d) }))
+      nudges: (hh.nudges || []).map(n => ({ ...n, key: shiftKey(n.key, d) })),
+      ledger: (hh.ledger || []).map(e => ({ ...e, key: shiftKey(e.key, d) }))
     };
   }
 
@@ -1641,7 +1690,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   }
   function normalize() {
     if (!S.settings) return;
-    S.notes ||= {}; S.rules ||= []; S.nudges ||= []; S.settings.nudge ||= { enabled: false, anonymous: true };
+    S.notes ||= {}; S.rules ||= []; S.nudges ||= []; S.ledger ||= []; S.settings.points ||= { enabled: true }; S.settings.nudge ||= { enabled: false, anonymous: true };
     S.settings.rating ||= DEFAULT_SETTINGS(null).rating; if (S.settings.rating.notes === undefined) S.settings.rating.notes = true;
     // Ältere Daten können Aufträge an Leute außerhalb der WG enthalten: nur Vertretungen unter Mitbewohnern bleiben
     S.jobs = (S.jobs || []).filter(j => j.key && !j.ext && T(j.key.split(":")[0]) && (!j.taker || isMember(j.taker)) && !(j.status === "open" && j.to));
@@ -1899,10 +1948,25 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     if (d.introTour !== undefined) { closeSheet(); S.tab = "woche"; render(); tourStart(); return; }
     if (d.undone) {
       const k = d.undone, [t] = splitKey(k), j = S.jobs.find(x => x.key === k && x.status === "done");
-      delete S.done[k]; delete S.ratings[k];
+      delete S.done[k]; delete S.ratings[k]; S.ledger = S.ledger.filter(e => e.key !== k);
       if (j) { j.status = "confirmed"; delete j.doneAt; }
       post(S.me, `hat „${t.title}“ wieder auf nicht erledigt gestellt.`);
       toast("Wieder offen. Melde es einfach erneut, wenn du fertig bist."); render(); return;
+    }
+    if (d.rescue) {
+      const k = d.rescue, [t, wk] = splitKey(k), from = assignee(t, wk);
+      if (!ptsOn() || !from || from === S.me || S.done[k]) return;
+      S.overrides[k] = { by: S.me, type: "rescue", from, at: now() };
+      post(S.me, `übernimmt ${t.title} von ${P(from).short}, weil es überfällig war.`);
+      toast(`Ist jetzt deins. Wenn du es als erledigt meldest, bekommst du ${t.points} ${ptsWord(t.points)} von ${P(from).short}.`); render(); return;
+    }
+    if (d.pass) { sheetPass(d.pass); return; }
+    if (d.passGo) {
+      const k = d.passGo, [t] = splitKey(k), to = $(".sheet input[name=pass-to]:checked")?.value;
+      if (!to || spendable(S.me) < t.points) { toast("Dafür reichen deine Punkte gerade nicht."); return; }
+      S.overrides[k] = { by: to, type: "pass", from: S.me, at: now() };
+      post(S.me, `gibt ${t.title} an ${P(to).short} ab (${t.points} ${ptsWord(t.points)}).`);
+      closeSheet(); toast(`${P(to).short} hat die Aufgabe. Die Punkte gehen rüber, sobald sie erledigt ist.`); render(); return;
     }
     if (d.nudgeSeen !== undefined) { DEV.nudgeSeen = Math.max(DEV.nudgeSeen, ...nudgesForMe().map(n => n.at)); saveDevice(); render(); return; }
     if (d.notif !== undefined) { Notification.requestPermission().then(p => { toast(p === "granted" ? "Benachrichtigungen sind an." : "Benachrichtigungen sind aus. Du siehst Erinnerungen weiter hier in der App."); render(); }); return; }
@@ -2019,6 +2083,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     else if (el.name === "s-r-who") s.rating.who = el.value;
     else if (el.id === "s-r-anon") s.rating.anonymous = el.checked;
     else if (el.id === "s-r-stats") s.rating.inStats = el.checked;
+    else if (el.id === "s-p-on") { s.points = { ...(s.points || {}), enabled: el.checked }; post(S.me, el.checked ? "hat das Punktekonto eingeschaltet." : "hat das Punktekonto ausgeschaltet."); }
     else if (el.id === "s-n-on") { s.nudge = { anonymous: true, ...(s.nudge || {}), enabled: el.checked }; post(S.me, el.checked ? "hat Anstupsen eingeschaltet." : "hat Anstupsen ausgeschaltet."); }
     else if (el.name === "s-n-anon") s.nudge.anonymous = el.value === "1";
     else if (el.id === "s-v-weeks") s.vacation.weeks = Math.max(0, Math.min(12, Number(el.value) || 0));
