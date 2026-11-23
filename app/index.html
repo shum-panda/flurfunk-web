@@ -219,7 +219,7 @@ tr.vacrow td, tr.vacrow th { background: var(--vac-soft); color: var(--vac); fon
 .set .row:first-of-type { border-top: 0; padding-top: 0; }
 .set .row p { font-size: 14px; color: var(--muted); grid-column: 1; }
 .set .row label.t { font-weight: 600; }
-@media (max-width: 560px) { .set .row { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .set .row { grid-template-columns: minmax(0, 1fr); } .set .row.trow { grid-template-columns: minmax(0, 1fr) auto; } }
 .switch { position: relative; width: 44px; height: 24px; flex: none; }
 .switch input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
 .switch span { position: absolute; inset: 0; background: var(--line); border-radius: 12px; transition: background .15s; pointer-events: none; }
@@ -435,6 +435,51 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     { id: "hof", title: "Gehweg und Hof fegen", detail: "Gehweg vor dem Haus und Hof bis zu den Fahrradständern. Im Winter: Schnee räumen bis 7 Uhr.", due: 5, every: 1, points: 2, price: 12, doneText: "hat Gehweg und Hof gefegt." },
     { id: "keller", title: "Keller und Waschraum", detail: "Boden fegen, Flusensieb des Trockners leeren, Fenster kurz lüften.", due: 6, every: 2, points: 2, price: 12, doneText: "hat Keller und Waschraum sauber gemacht." }
   ];
+  // Wie oft eine Aufgabe dran ist, in Wochen. offset verteilt seltene Aufgaben übers Jahr (Rest der absoluten Woche).
+  const EVERY = [[1, "jede Woche"], [2, "alle 2 Wochen"], [3, "alle 3 Wochen"], [4, "monatlich"], [8, "alle 2 Monate"], [13, "vierteljährlich"], [26, "halbjährlich"], [52, "jährlich"]];
+  const everyTxt = n => (EVERY.find(e => e[0] === n) || [0, `alle ${n} Wochen`])[1];
+  const PTS_TXT = ["leicht", "mittel", "aufwendig"];
+  // Marktplatz: Aufgabenpakete zum Übernehmen. [Titel, Beschreibung, alle n Wochen, fällig bis Wochentag (0 = Mo), Aufwand]
+  const PACKS = [
+    { id: "wohnung", name: "Kleine Wohnung", desc: "Für Wohnungen und WGs, in denen sich das Aufteilen nach Räumen nicht lohnt.", tasks: [
+      ["Boden saugen und wischen", "Alle Räume saugen, danach feucht wischen. Teppiche nur saugen.", 1, 5, 3],
+      ["Bad putzen", "WC, Waschbecken, Dusche oder Wanne und Spiegel. Handtücher wechseln.", 1, 5, 3],
+      ["Küche putzen", "Arbeitsflächen, Herd, Spüle und Fronten abwischen, Spüllappen wechseln.", 1, 6, 2],
+      ["Müll rausbringen", "Restmüll, Bio und Gelber Sack, wenn voll. Neue Tüten einlegen.", 1, 3, 1],
+      ["Altpapier und Altglas wegbringen", "Zum Container oder in die Tonne.", 2, 5, 1],
+      ["Staubwischen", "Regale, Fensterbänke, Lampen und Türrahmen.", 2, 5, 1],
+      ["Haushaltsvorrat auffüllen", "Spülmittel, Müllbeutel, Toilettenpapier und Putzmittel prüfen und nachkaufen.", 2, 4, 1]
+    ] },
+    { id: "jahr", name: "Grundreinigung übers Jahr", desc: "Seltene Aufgaben, die sonst vergessen werden. Sie werden über die Wochen verteilt.", tasks: [
+      ["Kühlschrank auswischen", "Ausräumen, Fächer und Dichtungen auswischen, Abgelaufenes wegwerfen.", 26, 5, 2],
+      ["Backofen reinigen", "Innenraum, Bleche und Gitter.", 13, 5, 2],
+      ["Fenster putzen", "Innen und außen, Rahmen und Fensterbänke.", 13, 5, 3],
+      ["Filter der Dunstabzugshaube reinigen", "In die Spülmaschine oder in heißem Wasser mit Spülmittel einweichen.", 13, 5, 1],
+      ["Waschmaschine reinigen", "Leerwäsche bei 90 °C, Gummidichtung und Flusensieb sauber machen.", 4, 5, 1],
+      ["Abflüsse reinigen", "Haare aus Dusche und Waschbecken holen, Spüle mit heißem Wasser durchspülen.", 4, 5, 1],
+      ["Wasserkocher und Kaffeemaschine entkalken", "Mit Zitronensäure oder Entkalker.", 4, 5, 1],
+      ["Mülleimer auswaschen", "Alle Eimer ausspülen und trocknen lassen.", 4, 5, 1],
+      ["Duschvorhang und Badematte waschen", "In die Waschmaschine, 40 °C.", 13, 5, 1],
+      ["Heizkörper entstauben", "Mit Heizkörperbürste oder Staubsauger zwischen den Rippen.", 26, 5, 1],
+      ["Gefrierfach abtauen", "Ausräumen, abtauen lassen, auswischen.", 52, 5, 2]
+    ] },
+    { id: "keller", name: "Keller und Abstellraum", desc: "Zusätzlich, wenn zur Wohnung ein Keller oder Waschraum gehört.", tasks: [
+      ["Keller und Waschraum", "Boden fegen, Flusensieb des Trockners leeren, kurz lüften.", 2, 6, 2],
+      ["Abstellraum aufräumen", "Aussortieren, was keiner mehr braucht, Boden fegen.", 13, 6, 2]
+    ] },
+    { id: "haus", name: "Mehrparteienhaus", desc: "Was laut Hausordnung reihum anfällt: Treppenhaus, Gehweg, Tonnen.", tasks: [
+      ["Treppenhaus wischen", "Alle Etagen feucht wischen, Geländer und Briefkästen abwischen.", 1, 5, 3],
+      ["Mülltonnen rausstellen", "Am Abend vor der Leerung an die Straße, nach der Leerung zurück.", 1, 1, 1],
+      ["Gehweg und Hof fegen", "Gehweg vor dem Haus und Hof. Im Winter: Schnee räumen bis 7 Uhr.", 1, 5, 2]
+    ] },
+    { id: "garten", name: "Haus mit Garten", desc: "Für ein eigenes Haus mit Garten und Einfahrt.", tasks: [
+      ["Rasen mähen", "In der Saison, etwa April bis Oktober. Im Winter einfach als erledigt melden.", 2, 5, 3],
+      ["Beete und Unkraut", "Unkraut jäten, Pflanzen gießen, wenn es nicht regnet.", 4, 5, 2],
+      ["Einfahrt und Gehweg fegen", "Im Winter: Schnee räumen und streuen.", 1, 5, 2],
+      ["Mülltonnen rausstellen", "Am Abend vor der Leerung an die Straße, nach der Leerung zurück.", 1, 1, 1],
+      ["Dachrinne und Abflüsse prüfen", "Laub entfernen, im Frühjahr und im Herbst.", 26, 5, 3]
+    ] }
+  ];
   const DEFAULT_SETTINGS = admin => ({ admin, mode: "plan", distDay: 3, rating: { enabled: true, who: "alle", anonymous: true, inStats: true, notes: true }, vacation: { weeks: 4, approval: "one" } });
   const uid = p => p + now().toString(36) + Math.random().toString(36).slice(2, 7);
   const localDefaults = () => ({ me: null, tab: "woche", wk: 0, statRange: 12 });
@@ -537,10 +582,24 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   const P = id => S.parties.find(p => p.id === id) || (id && id !== "sys" ? UNKNOWN(id) : undefined);
   const T = id => S.tasks.find(t => t.id === id);
   const keyOf = (tid, wk) => `${tid}:${wk}`;
-  const splitKey = k => { const [tid, wk] = k.split(":"); return [T(tid), Number(wk)]; };
+  // Gelöschte Aufgaben: alte Einträge (Verlauf, Flurfunk) sollen weiter funktionieren
+  const GONE = id => ({ id, title: "Gelöschte Aufgabe", detail: "", due: 6, every: 1, offset: 0, points: 1, doneText: "hat eine Aufgabe erledigt.", gone: true });
+  const splitKey = k => { const [tid, wk] = k.split(":"); return [T(tid) || GONE(tid), Number(wk)]; };
   // Wochen sind in S relativ zur aktuellen Woche (0 = diese Woche), im WG-Dokument absolut (CUR + wk).
   // So meinen zwei Geräte mit derselben Zahl dieselbe Woche, egal wann sie die App geöffnet haben.
-  const active = (t, wk) => (((wk + CUR) % t.every) + t.every) % t.every === 0;
+  const active = (t, wk) => { const n = t.every || 1; return (((wk + CUR - (t.offset || 0)) % n) + n) % n === 0; };
+  const nextWeek = t => { for (let w = 0; w <= (t.every || 1); w++) if (active(t, w)) return w; return 0; };
+  // Seltene Aufgabe in die Woche legen, in der bisher am wenigsten Aufwand anfällt
+  function spreadOffset(t, others) {
+    const n = t.every || 1; if (n === 1) return 0;
+    let best = 0, bestLoad = Infinity;
+    for (let w = 0; w < n; w++) {
+      const load = others.filter(o => o !== t && (o.every || 1) > 1 && active(o, w)).reduce((s, o) => s + o.points, 0);
+      if (load < bestLoad) { best = w; bestLoad = load; }
+    }
+    return (((CUR + best) % n) + n) % n;
+  }
+  const doneTextOf = title => `hat „${title}“ erledigt.`;
   const dueDate = (t, wk) => { const m = weekStart(wk); return new Date(m.getFullYear(), m.getMonth(), m.getDate() + t.due, 20); };
   const isAdmin = () => S.me === S.settings.admin;
 
@@ -701,7 +760,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         ${avatar(who)}
         <h3>${esc(t.title)} <span class="pts" title="Aufwand">${"●".repeat(t.points)}${"○".repeat(3 - t.points)}</span> <span class="pill ${st.cls}">${esc(st.label)}</span></h3>
         <p class="detail">${esc(t.detail)}</p>
-        <p class="meta"><span>${byline}</span><span>${d ? `erledigt ${ago(d.at)}${d.by !== who ? ` von ${esc(youOr(d.by))}` : ""}` : `bis ${wday(due)}, ${fmtD(due)}`}</span>${t.every > 1 ? `<span>alle ${t.every} Wochen</span>` : ""}</p>
+        <p class="meta"><span>${byline}</span><span>${d ? `erledigt ${ago(d.at)}${d.by !== who ? ` von ${esc(youOr(d.by))}` : ""}` : `bis ${wday(due)}, ${fmtD(due)}`}</span>${t.every > 1 ? `<span>${everyTxt(t.every)}</span>` : ""}</p>
         ${forecastLine}
         ${(b?.status === "open" ? b.note : r?.note) ? `<p class="detail" style="grid-column:2">„${esc(b?.status === "open" ? b.note : r.note)}“</p>` : ""}
         ${acts.length ? `<div class="actions">${acts.join("")}</div>` : ""}
@@ -718,7 +777,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       <p class="lead">${liste ? "Jeder nimmt sich in der Woche selbst Aufgaben. Hier siehst du, wer was gemacht hat und wer was übernommen hat." : "Die Aufgaben wechseln jede Woche reihum unter allen, die da sind. Wer im Urlaub ist, wird übersprungen."} Deine Felder sind markiert.</p>
       <div class="tablewrap"><table>
         <thead><tr><th>Aufgabe</th>${weeks.map(w => `<th class="wk ${w === 0 ? "cur" : ""}">${weekLabel(w)}</th>`).join("")}</tr></thead>
-        <tbody>${S.tasks.map(t => `<tr><th scope="row" style="color:var(--ink)">${esc(t.title)}</th>${weeks.map(w => {
+        <tbody>${S.tasks.filter(t => weeks.some(w => active(t, w))).map(t => `<tr><th scope="row" style="color:var(--ink)">${esc(t.title)}</th>${weeks.map(w => {
           if (!active(t, w)) return `<td class="${w === 0 ? "cur" : ""}" style="color:var(--muted)">–</td>`;
           const k = keyOf(t.id, w), d = S.done[k], who = d ? d.by : assignee(t, w), ov = S.overrides[k], b = jobFor(k);
           if (!who) return `<td class="free ${w === 0 ? "cur" : ""}">frei</td>`;
@@ -729,7 +788,10 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
         <tr class="vacrow"><th scope="row">Im Urlaub</th>${weeks.map(w => `<td class="${w === 0 ? "cur" : ""}">${S.parties.filter(p => onVac(p.id, w)).map(p => esc(p.short)).join(", ") || "–"}</td>`).join("")}</tr>
         </tbody>
       </table></div>
-      <p class="hint">● Aufwand pro Aufgabe, festgelegt in den WG-Einstellungen. Keller und Waschraum alle zwei Wochen.</p>`;
+      <p class="hint">● Aufwand pro Aufgabe, festgelegt in den WG-Einstellungen.</p>
+      ${(() => { const rare = S.tasks.filter(t => !weeks.some(w => active(t, w))).sort((a, b) => nextWeek(a) - nextWeek(b)); return rare.length ? `
+      <h2 class="section-title" style="font-size:19px;margin-top:18px">Seltene Aufgaben</h2>
+      <ul class="ledger">${rare.map(t => `<li><span class="grow"><b>${esc(t.title)}</b><br><span class="hint">${everyTxt(t.every)}</span></span><span class="pill open">${weekLabel(nextWeek(t))}</span></li>`).join("")}</ul>` : ""; })()}`;
   }
 
   // ---------- Statistik ----------
@@ -892,9 +954,10 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
           ${s.mode === "liste" ? `<div class="row"><label class="t" for="s-dist">Übrige Aufgaben verteilen am</label><select id="s-dist" class="sm" ${dis}>${[2, 3, 4].map(d => `<option value="${d}" ${s.distDay === d ? "selected" : ""}>${DAYS[d]}, 12 Uhr</option>`).join("")}</select></div>` : ""}
         </section>
         <section class="set">
-          <h2>Aufgaben und Aufwand</h2>
-          ${S.tasks.map(t => `<div class="row"><label class="t" for="s-pts-${t.id}">${esc(t.title)}</label><select id="s-pts-${t.id}" class="sm" data-pts="${t.id}" ${dis}>${[1, 2, 3].map(n => `<option value="${n}" ${t.points === n ? "selected" : ""}>${"●".repeat(n)} ${["leicht", "mittel", "aufwendig"][n - 1]}</option>`).join("")}</select></div>`).join("")}
-          <p class="hint">Der Aufwand bestimmt die Punkte in der Statistik und die Verteilung in der Aufgabenliste.</p>
+          <h2>Aufgaben (${S.tasks.length})</h2>
+          ${S.tasks.length ? S.tasks.map(t => `<div class="row trow"><span class="t" style="font-weight:600">${esc(t.title)}</span>${isAdmin() ? `<button type="button" class="btn small" data-tedit="${t.id}">Ändern</button>` : ""}<p>${everyTxt(t.every || 1)} · bis ${DAYS[t.due]} · ${"●".repeat(t.points)}${"○".repeat(3 - t.points)} ${PTS_TXT[t.points - 1]}${(t.every || 1) > 1 ? ` · nächstes Mal ${weekLabel(nextWeek(t))}` : ""}</p></div>`).join("") : `<p class="hint">Noch keine Aufgaben. Übernimm ein Paket oder lege selbst welche an.</p>`}
+          ${isAdmin() ? `<div class="actions" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" data-market>Aufgabenpakete ansehen</button><button type="button" class="btn" data-tedit="new">Eigene Aufgabe anlegen</button></div>` : ""}
+          <p class="hint">Der Aufwand bestimmt die Punkte in der Statistik und die Verteilung in der Aufgabenliste. Seltene Aufgaben werden über die Wochen verteilt, damit nicht alles auf einmal kommt.</p>
         </section>
         <section class="set">
           <h2>Bewertungen und Anmerkungen</h2>
@@ -1005,6 +1068,82 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     const nVac = S.vacations.filter(v => v.status === "pending" && v.who !== S.me && !v.approvals.includes(S.me) && !v.rejections.includes(S.me)).length;
     const items = [["urlaub", "Urlaub", nVac], ["hilfe", "Vertretungen", nOpenWg()], ["settings", "WG-Einstellungen"], ["ordnung", "Hausordnung"]];
     openSheet(`<h2>Mehr</h2><div class="morelist">${items.map(([k, l, c]) => `<button type="button" data-tab="${k}"><span>${l}</span>${c ? `<span class="count pill help">${c}</span>` : `<span aria-hidden="true">›</span>`}</button>`).join("")}</div><div class="row"><button type="button" class="btn" data-close-btn>Schließen</button></div>`);
+  }
+
+  // ---------- Aufgaben bearbeiten und Marktplatz (nur Admin) ----------
+  const sameTitle = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  function sheetTask(id) {
+    const t = id === "new" ? { title: "", detail: "", every: 1, due: 5, points: 2 } : T(id); if (!t) return;
+    const opt = (list, v) => list.map(([n, l]) => `<option value="${n}" ${v === n ? "selected" : ""}>${l}</option>`).join("");
+    const everyList = EVERY.some(e => e[0] === t.every) ? EVERY : [...EVERY, [t.every, everyTxt(t.every)]];
+    openSheet(`
+      <h2>${id === "new" ? "Neue Aufgabe" : "Aufgabe ändern"}</h2>
+      <div class="field"><label for="te-title">Name</label><input id="te-title" type="text" maxlength="60" value="${esc(t.title)}" placeholder="z. B. Boden saugen und wischen"></div>
+      <div class="field"><label for="te-detail">Was gehört dazu? (optional)</label><textarea id="te-detail" rows="2" maxlength="240" placeholder="z. B. Alle Räume saugen, danach feucht wischen.">${esc(t.detail)}</textarea></div>
+      <div class="field"><label for="te-every">Wie oft?</label><select id="te-every">${opt(everyList, t.every || 1)}</select></div>
+      <div class="field"><label for="te-due">Erledigt bis</label><select id="te-due">${opt(DAYS.map((d, i) => [i, d]), t.due)}</select></div>
+      <div class="field"><label for="te-pts">Aufwand</label><select id="te-pts">${opt([1, 2, 3].map(n => [n, `${"●".repeat(n)}${"○".repeat(3 - n)} ${PTS_TXT[n - 1]}`]), t.points)}</select></div>
+      <div class="row">${id === "new" ? "" : `<button type="button" class="btn quiet" style="margin-right:auto;color:var(--late)" data-tdel-ask="${id}">Löschen</button>`}<button type="button" class="btn" data-close-btn>Abbrechen</button><button type="button" class="btn primary" data-tsave="${id}">Speichern</button></div>`);
+    $("#te-title").focus();
+  }
+  function saveTask(id) {
+    const title = $("#te-title").value.trim().replace(/\s+/g, " ");
+    if (!title) { toast("Bitte einen Namen eingeben."); $("#te-title").focus(); return false; }
+    if (S.tasks.some(x => x.id !== id && sameTitle(x.title, title))) { toast("Diese Aufgabe gibt es schon."); return false; }
+    const vals = { title, detail: $("#te-detail").value.trim(), every: Number($("#te-every").value), due: Number($("#te-due").value), points: Number($("#te-pts").value) };
+    if (id === "new") {
+      const t = { id: uid("t"), ...vals, doneText: doneTextOf(title) };
+      t.offset = spreadOffset(t, S.tasks); S.tasks.push(t);
+      post(S.me, `hat die Aufgabe „${title}“ angelegt (${everyTxt(t.every)}).`);
+      toast(t.every > 1 ? `Angelegt. Zum ersten Mal ${weekLabel(nextWeek(t))}.` : "Angelegt. Gilt ab dieser Woche.");
+    } else {
+      const t = T(id), everyChanged = t.every !== vals.every;
+      if (t.title !== title) t.doneText = doneTextOf(title);
+      Object.assign(t, vals);
+      if (everyChanged) t.offset = spreadOffset(t, S.tasks);
+      toast("Gespeichert. Gilt sofort für alle.");
+    }
+    return true;
+  }
+  function deleteTask(id) {
+    const t = T(id); if (!t) return;
+    S.tasks = S.tasks.filter(x => x.id !== id);
+    // Offene Anfragen und Zuteilungen ab dieser Woche fallen weg, erledigte bleiben im Verlauf
+    const future = k => k.startsWith(id + ":") && Number(k.split(":")[1]) >= 0;
+    for (const k of Object.keys(S.claims)) if (future(k)) delete S.claims[k];
+    for (const k of Object.keys(S.overrides)) if (future(k)) delete S.overrides[k];
+    S.jobs.forEach(j => { if (j.key && future(j.key) && ["open", "confirmed"].includes(j.status)) j.status = "cancelled"; });
+    S.requests.forEach(r => { if (r.key && future(r.key) && r.status === "open") r.status = "cancelled"; });
+    post(S.me, `hat die Aufgabe „${t.title}“ entfernt.`);
+  }
+  function sheetMarket() {
+    openSheet(`
+      <h2>Aufgabenpakete</h2>
+      <p class="lead">Wähl ein Paket, dann kannst du einzelne Aufgaben abwählen. Was ihr schon habt, wird übersprungen.</p>
+      <div class="morelist">${PACKS.map(p => { const n = p.tasks.filter(([title]) => !S.tasks.some(t => sameTitle(t.title, title))).length;
+        return `<button type="button" data-pack="${p.id}"><span>${esc(p.name)}<br><small class="hint" style="font-weight:400">${esc(p.desc)}</small></span><span class="pill ${n ? "open" : "done"}">${n ? `${n} neu` : "alles da"}</span></button>`; }).join("")}</div>
+      <div class="row"><button type="button" class="btn" data-close-btn>Schließen</button></div>`);
+  }
+  function sheetPack(pid) {
+    const p = PACKS.find(x => x.id === pid); if (!p) return;
+    openSheet(`
+      <h2>${esc(p.name)}</h2>
+      <p class="lead">${esc(p.desc)} Den Aufwand und wie oft kannst du danach bei jeder Aufgabe ändern.</p>
+      <div class="choice">${p.tasks.map(([title, detail, every, due, pts], i) => { const has = S.tasks.some(t => sameTitle(t.title, title));
+        return `<label style="${has ? "opacity:.55" : ""}"><input type="checkbox" data-pi="${i}" ${has ? "disabled" : "checked"}><strong>${esc(title)}</strong><small>${has ? "Habt ihr schon" : `${everyTxt(every)} · ${"●".repeat(pts)}${"○".repeat(3 - pts)} ${PTS_TXT[pts - 1]} · ${esc(detail)}`}</small></label>`; }).join("")}</div>
+      <div class="row"><button type="button" class="btn" data-market>Zurück</button><button type="button" class="btn primary" data-pack-add="${p.id}">Ausgewählte übernehmen</button></div>`);
+  }
+  function addPack(pid) {
+    const p = PACKS.find(x => x.id === pid); if (!p) return 0;
+    const picked = [...document.querySelectorAll(".sheet input[data-pi]:checked")].map(el => p.tasks[Number(el.dataset.pi)]);
+    let n = 0;
+    for (const [title, detail, every, due, points] of picked) {
+      if (S.tasks.some(t => sameTitle(t.title, title))) continue;
+      const t = { id: uid("t"), title, detail, every, due, points, doneText: doneTextOf(title) };
+      t.offset = spreadOffset(t, S.tasks); S.tasks.push(t); n++;
+    }
+    if (n) post(S.me, `hat ${n} ${n === 1 ? "Aufgabe" : "Aufgaben"} aus dem Paket „${p.name}“ übernommen.`);
+    return n;
   }
 
   // ---------- Dialoge ----------
@@ -1433,6 +1572,15 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     }
     if (d.leave !== undefined) { leaveHousehold(); return; }
     if (d.invite !== undefined) { sheetInvite(); return; }
+    // Aufgaben und Marktplatz (nur Admin)
+    if ((d.tedit || d.tsave || d.tdelAsk || d.tdel || d.market !== undefined || d.pack || d.packAdd) && !isAdmin()) { toast("Nur der Admin kann Aufgaben ändern."); return; }
+    if (d.tedit) { sheetTask(d.tedit); return; }
+    if (d.tsave) { if (saveTask(d.tsave)) { closeSheet(); render(); } return; }
+    if (d.tdelAsk) { const id = d.tdelAsk; b.textContent = "Wirklich löschen?"; delete b.dataset.tdelAsk; b.dataset.tdel = id; return; }
+    if (d.tdel) { deleteTask(d.tdel); closeSheet(); toast("Aufgabe gelöscht. Erledigtes bleibt in der Statistik."); render(); return; }
+    if (d.market !== undefined) { sheetMarket(); return; }
+    if (d.pack) { sheetPack(d.pack); return; }
+    if (d.packAdd) { const n = addPack(d.packAdd); closeSheet(); toast(n ? `${n} ${n === 1 ? "Aufgabe" : "Aufgaben"} übernommen.` : "Nichts ausgewählt."); render(); return; }
     if (d.copy) { const t = d.copy; (navigator.clipboard?.writeText ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("Kopiert."), () => toast("Bitte den Code markieren und kopieren.")); return; }
     if (d.tab) { S.tab = d.tab; closeSheet(); render(); window.scrollTo({ top: 0 }); return; }
     if (d.more !== undefined) { sheetMore(); return; }
