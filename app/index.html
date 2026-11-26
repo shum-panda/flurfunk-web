@@ -401,6 +401,8 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
 .codebox { font-family: var(--f-mono); font-size: 17px; letter-spacing: .06em; word-break: break-all; background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; text-align: center; user-select: all; }
 .qr { width: 196px; height: 196px; margin: 0 auto; background: #fff; padding: 6px; border-radius: 14px; border: 1px solid var(--line); }
 .qr svg { width: 100%; height: 100%; display: block; }
+.scanbox { aspect-ratio: 1; max-width: 320px; width: 100%; margin: 0 auto; border-radius: 14px; overflow: hidden; background: #000; }
+.scanbox video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .radar { width: 64px; height: 64px; border-radius: 50%; margin: 6px auto; position: relative; background: radial-gradient(circle, var(--accent) 0 6px, transparent 7px); }
 .radar::before, .radar::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; animation: ffping 2.4s ease-out infinite; }
 .radar::after { animation-delay: 1.2s; }
@@ -1892,6 +1894,44 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   let A = A0();
   const setA = patch => { A = { ...A, err: "", ok: "", ...patch }; render(); window.scrollTo({ top: 0 }); };
   const joinFromLink = () => { const m = location.hash.match(/join=([^&]+)/); return m ? decodeURIComponent(m[1]) : ""; };
+  // Öffentliche Adresse der App: Ein QR-Code mit diesem Link öffnet Flurfunk direkt beim Beitreten,
+  // auch mit der normalen Handy-Kamera oder Google Lens. Der Code steht hinter „#“ und geht nie an einen Server.
+  const PUBLIC_APP = "https://shum-panda.github.io/flurfunk-web/app/";
+  const appBase = () => location.protocol.startsWith("http") ? location.origin + location.pathname : PUBLIC_APP;
+  // Code aus gescanntem Text: ganzer Einladungslink oder nur der Code (parseInviteCode kann beides)
+  const codeFromScan = txt => FF.parseInviteCode(txt);
+  const canScan = () => hasCore() && "BarcodeDetector" in window && !!navigator.mediaDevices?.getUserMedia;
+
+  // QR-Code mit der Kamera lesen (Chrome/Android; auf dem iPhone die normale Kamera nehmen)
+  async function sheetScan() {
+    openSheet(`<h2>QR-Code scannen</h2><p class="lead">Halte die Kamera auf den QR-Code, den dein Mitbewohner unter „Mitbewohner einladen“ zeigt.</p>
+      <div class="scanbox"><video id="scan-v" playsinline muted></video></div><p class="hint" id="scan-msg">Kamera startet …</p>
+      <div class="row"><button type="button" class="btn" data-close-btn>Abbrechen</button></div>`);
+    const v = $("#scan-v"), msg = t => { const el = $("#scan-msg"); if (el) el.textContent = t; };
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    } catch (e) {
+      return msg(e?.name === "NotAllowedError" ? "Flurfunk darf die Kamera nicht benutzen. Erlaube sie in den Browser-Einstellungen oder scanne den Code mit der normalen Kamera-App." : "Die Kamera lässt sich nicht starten. Scanne den Code mit der normalen Kamera-App oder tippe ihn ein.");
+    }
+    const stop = () => stream.getTracks().forEach(t => t.stop());
+    if (!v.isConnected) return stop();
+    v.srcObject = stream; await v.play().catch(() => {});
+    msg("Suche QR-Code …");
+    const det = new BarcodeDetector({ formats: ["qr_code"] });
+    while (v.isConnected) {
+      try {
+        const found = await det.detect(v);
+        for (const f of found) {
+          const code = codeFromScan(f.rawValue);
+          if (code) { stop(); closeSheet(); setA({ step: "join", code, link: true }); return; }
+        }
+        if (found.length) msg("Das ist kein Flurfunk-Einladungscode.");
+      } catch {}
+      await new Promise(r => setTimeout(r, 250));
+    }
+    stop();
+  }
 
   function appMode() {
     if (S.meta && HHD) return isMember(S.me) ? "wg" : "pick";
@@ -1915,7 +1955,11 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
           </form>${back}`);
         break;
       case "join":
-        body = card(`<h1>Einer WG beitreten</h1><p class="lead">Gib den Einladungscode ein, den dir ein Mitbewohner zeigt (unter „Dieses Gerät“ oder in den WG-Einstellungen). Der Code ist zugleich euer gemeinsamer Schlüssel: Gib ihn nur an Leute, die bei euch wohnen.</p>${msg}
+        body = A.link && (A.code || joinFromLink())
+          ? card(`<h1>Du bist eingeladen</h1><p class="lead">Der Einladungscode ist schon eingetragen. Tippe auf „Beitreten“, dann holt dein Gerät die verschlüsselten WG-Daten und du wählst deinen Namen.</p>${msg}
+          <form data-auth="join"><div class="field"><label for="j-code">Einladungscode</label><input id="j-code" class="mono" autocomplete="off" required value="${esc(A.code || joinFromLink())}" style="text-transform:uppercase"></div><button type="submit" class="btn primary">Beitreten</button></form>${back}`)
+          : card(`<h1>Einer WG beitreten</h1><p class="lead">Scanne den QR-Code, den dir ein Mitbewohner zeigt (unter „Dieses Gerät“ oder in den WG-Einstellungen), oder gib den Code ein. Der Code ist zugleich euer gemeinsamer Schlüssel: Gib ihn nur an Leute, die bei euch wohnen.</p>${msg}
+          ${canScan() ? `<button type="button" class="btn" data-scan>QR-Code scannen</button><div class="or">oder Code eintippen</div>` : `<p class="hint">Tipp: Den QR-Code kannst du auch mit der normalen Kamera-App scannen. Dann öffnet sich Flurfunk mit dem Code.</p>`}
           <form data-auth="join"><div class="field"><label for="j-code">Einladungscode</label><input id="j-code" class="mono" autocomplete="off" required placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" value="${esc(A.code || joinFromLink())}" style="text-transform:uppercase"></div><button type="submit" class="btn primary">Beitreten</button></form>${back}`);
         break;
       default:
@@ -1974,10 +2018,11 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
   const inviteHtml = () => {
     const code = HHD?.info?.code;
     if (!code) return `<p class="hint">Ohne Sync-Modul gibt es keinen Einladungscode.</p>`;
-    const link = location.protocol.startsWith("http") ? FF.inviteLink(code, location.origin + location.pathname) : code;
-    return `<div class="qr" aria-label="QR-Code mit dem Einladungscode">${FF.qrSvg(link)}</div>
+    const link = FF.inviteLink(code, appBase());
+    return `<div class="qr" aria-label="QR-Code mit dem Einladungslink">${FF.qrSvg(link)}</div>
+      <p class="hint" style="text-align:center">Mit der Handy-Kamera oder Google Lens scannen: Flurfunk öffnet sich mit dem Code.</p>
       <p class="codebox" id="invite-code">${esc(code)}</p>
-      <div class="row" style="justify-content:center"><button type="button" class="btn small" data-copy="${esc(link)}">Code kopieren</button></div>
+      <div class="row" style="justify-content:center"><button type="button" class="btn small" data-copy="${esc(link)}">Link kopieren</button></div>
       <p class="hint">Der Code ist euer gemeinsamer Schlüssel: Wer ihn hat, sieht alle WG-Daten. Gib ihn nur an Mitbewohner. Neue sind ab der nächsten Woche im Plan.</p>`;
   };
   function sheetDevice() {
@@ -2095,6 +2140,7 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
     // Gerät, WG
     if (b.id === "acct" || b.id === "sync" || d.device !== undefined) { sheetDevice(); return; }
     if (d.astep) { setA({ step: d.astep }); return; }
+    if (d.scan !== undefined) { sheetScan(); return; }
     if (d.demo !== undefined) {
       seed(); const hh = {}; for (const k of HH_KEYS) hh[k] = S[k];
       createHousehold(hh).then(() => { render(); toast("Beispiel-WG angelegt. Oben rechts siehst du den Sync-Status."); });
@@ -2306,7 +2352,14 @@ body { background: radial-gradient(1100px 360px at 50% -170px, var(--accent-soft
       await openHH(DEV.code);
       if (HHD.read()) adopt(HHD.read());
     }
-    if (joinFromLink() && !DEV.code) A = { ...A0(), step: "join" };
+    const linked = joinFromLink();
+    if (linked && !DEV.code) A = { ...A0(), step: "join", link: true };
+    else if (linked) {
+      // Dieses Gerät ist schon in einer WG: nicht still überschreiben
+      history.replaceState(null, "", location.pathname);
+      const same = hasCore() && FF.parseInviteCode(linked) === DEV.code;
+      setTimeout(() => toast(same ? "Du bist schon in dieser WG." : "Dieses Gerät ist schon in einer WG. Um einer anderen beizutreten, entferne sie erst unter „Dieses Gerät“."), 600);
+    }
     render();
   }
   boot().catch(e => { console.error(e); $("#app").innerHTML = `<p class="err">Flurfunk konnte nicht starten: ${esc(e.message)}</p>`; });
